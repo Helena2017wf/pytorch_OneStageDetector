@@ -7,7 +7,7 @@ import torch.nn.init as init
 import argparse
 from torch.autograd import Variable
 import torch.utils.data as data
-from data import v2, v1, AnnotationTransform, VOCDetection, detection_collate, VOCroot, VOC_CLASSES
+from data import v2, v1, DatasetRoot,GetDataset,AnnotationTransform,CLASSES,detection_collate
 from utils.augmentations import SSDAugmentation
 from layers.modules import MultiBoxLoss
 from ssd import build_ssd
@@ -27,15 +27,15 @@ parser.add_argument('--num_workers', default=2, type=int, help='Number of worker
 parser.add_argument('--iterations', default=120000, type=int, help='Number of training iterations')
 parser.add_argument('--start_iter', default=0, type=int, help='Begin counting iterations starting from this value (should be used with resume)')
 parser.add_argument('--cuda', default=True, type=str2bool, help='Use cuda to train model')
-parser.add_argument('--lr', '--learning-rate', default=1e-3, type=float, help='initial learning rate')
+parser.add_argument('--lr', '--learning-rate', default=1e-4, type=float, help='initial learning rate')
 parser.add_argument('--momentum', default=0.9, type=float, help='momentum')
 parser.add_argument('--weight_decay', default=5e-4, type=float, help='Weight decay for SGD')
 parser.add_argument('--gamma', default=0.1, type=float, help='Gamma update for SGD')
 parser.add_argument('--log_iters', default=True, type=bool, help='Print the loss at each iteration')
-parser.add_argument('--visdom', default=False, type=str2bool, help='Use visdom to for loss visualization')
+parser.add_argument('--visdom', default=True, type=str2bool, help='Use visdom to for loss visualization')
 parser.add_argument('--send_images_to_visdom', type=str2bool, default=False, help='Sample a random image from each 10th batch, send it to visdom after augmentations step')
 parser.add_argument('--save_folder', default='weights/', help='Location to save checkpoint models')
-parser.add_argument('--voc_root', default=VOCroot, help='Location of VOC root directory')
+parser.add_argument('--voc_root', default=DatasetRoot, help='Location of VOC root directory')
 args = parser.parse_args()
 
 if args.cuda and torch.cuda.is_available():
@@ -48,11 +48,11 @@ cfg = (v1, v2)[args.version == 'v2']
 if not os.path.exists(args.save_folder):
     os.mkdir(args.save_folder)
 
-train_sets = [('2007', 'trainval'), ('2012', 'trainval')]
+# train_sets = [('2007', 'trainval'), ('2012', 'trainval')]
 # train_sets = 'train'
 ssd_dim = 300  # only support 300 now
 means = (104, 117, 123)  # only support voc now
-num_classes = len(VOC_CLASSES) + 1
+num_classes = len(CLASSES) + 1
 batch_size = args.batch_size
 accum_batch_size = 32
 iter_size = accum_batch_size / batch_size
@@ -115,8 +115,8 @@ def train():
     epoch = 0
     print('Loading Dataset...')
 
-    dataset = VOCDetection(args.voc_root, train_sets, SSDAugmentation(
-        ssd_dim, means), AnnotationTransform())
+    dataset = GetDataset(args.voc_root, SSDAugmentation(
+        ssd_dim, means), AnnotationTransform(),skip=2)
 
     epoch_size = len(dataset) // args.batch_size
     print('Training SSD on', dataset.name)
@@ -212,9 +212,9 @@ def train():
                 )
         if iteration % 5000 == 0:
             print('Saving state, iter:', iteration)
-            torch.save(ssd_net.state_dict(), 'weights/ssd300_0712_' +
+            torch.save(ssd_net.state_dict(), 'weights/ssd300_KAIST_' +
                        repr(iteration) + '.pth')
-    torch.save(ssd_net.state_dict(), args.save_folder + '' + args.version + '.pth')
+    torch.save(ssd_net.state_dict(), args.save_folder + 'KAIST' + args.version + '.pth')
 
 
 def adjust_learning_rate(optimizer, gamma, step):

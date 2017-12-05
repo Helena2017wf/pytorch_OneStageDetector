@@ -13,31 +13,19 @@ import torch
 import torch.utils.data as data
 import torchvision.transforms as transforms
 from PIL import Image, ImageDraw, ImageFont
+import matplotlib.pyplot as plt
 import cv2
 import numpy as np
-if sys.version_info[0] == 2:
-    import xml.etree.cElementTree as ET
-else:
-    import xml.etree.ElementTree as ET
+from utils.augmentations import SSDAugmentation
 
-DATASET_NAME = "VOC0712"
-CLASSES = (  # always index 0
-    'aeroplane', 'bicycle', 'bird', 'boat',
-    'bottle', 'bus', 'car', 'cat', 'chair',
-    'cow', 'diningtable', 'dog', 'horse',
-    'motorbike', 'person', 'pottedplant',
-    'sheep', 'sofa', 'train', 'tvmonitor')
+DATASET_NAME = "KAIST"
+CLASSES = ('person',)
 
 # for making bounding boxes pretty
 COLORS = ((255, 0, 0, 128), (0, 255, 0, 128), (0, 0, 255, 128),
           (0, 255, 255, 128), (255, 0, 255, 128), (255, 255, 0, 128))
 
-# gets home dir cross platform
-# home = os.path.expanduser("~")
-DatasetRoot = os.path.join("/data/PASCAL_VOC","VOCdevkit/")
-
-
-
+DatasetRoot = "/data/KAIST"
 
 class AnnotationTransform(object):
     """Transforms a VOC annotation into a Tensor of bbox coords and label index
@@ -57,6 +45,7 @@ class AnnotationTransform(object):
             zip(CLASSES, range(len(CLASSES))))
         self.keep_difficult = keep_difficult
 
+
     def __call__(self, target, width, height):
         """
         Arguments:
@@ -66,25 +55,25 @@ class AnnotationTransform(object):
             a list containing lists of bounding boxes  [bbox coords, class name]
         """
         res = []
-        for obj in target.iter('object'):
-            difficult = int(obj.find('difficult').text) == 1
-            if not self.keep_difficult and difficult:
-                continue
-            name = obj.find('name').text.lower().strip()
-            bbox = obj.find('bndbox')
-
-            pts = ['xmin', 'ymin', 'xmax', 'ymax']
-            bndbox = []
-            for i, pt in enumerate(pts):
-                cur_pt = int(bbox.find(pt).text) - 1
-                # scale height or width
-                cur_pt = cur_pt / width if i % 2 == 0 else cur_pt / height
-                bndbox.append(cur_pt)
-            label_idx = self.class_to_ind[name]
-            bndbox.append(label_idx)
-            res += [bndbox]  # [xmin, ymin, xmax, ymax, label_ind]
-            # img_id = target.find('filename').text[:-4]
-
+        with open(target) as f:
+            for line in f:
+                line = line.strip().split()
+                if line[0] == "%":
+                    continue
+                else:
+                    text = line[0]
+                    if text in ['person','cyclist']:
+                        box = [int(i) for i in line[1:5]]
+                        ##bbox format "xywh"
+                        ## convert to "xmin,ymin, xmax, ymax"
+                        x, y, w, h = box
+                        xmin = float(x) / float(width)
+                        ymin = float(y) / float(height)
+                        xmax = np.minimum(1.0, float(x + w) / float(width))
+                        ymax = np.minimum(1.0, float(y + h) / float(height))
+                        label_idx = 0 #self.class_to_ind[text]
+                        box = [ xmin,ymin, xmax, ymax,label_idx]
+                        res += [box]
         return res  # [[xmin, ymin, xmax, ymax, label_ind], ... ]
 
 
@@ -105,22 +94,24 @@ class GetDataset(data.Dataset):
             (default: 'VOC2007')
     """
 
-    def __init__(self, root, transform=None, target_transform=None,image_sets = [('2007', 'trainval'), ('2012', 'trainval')],
-                 dataset_name='VOC0712'):
+    def __init__(self, root, transform=None, target_transform=None,
+                 type='visible',dataset_name='train01_valid_only_person',skip=0):
         self.root = root
-        self.image_set = image_sets
+        self.type = type
+        self.name = dataset_name
         self.transform = transform
         self.target_transform = target_transform
-        self.name = dataset_name
-        self._annopath = os.path.join('%s', 'Annotations', '%s.xml')
-        self._imgpath = os.path.join('%s', 'JPEGImages', '%s.jpg')
+        self._annopath = os.path.join('%s', 'annotations','%s','%s', '%s.txt')
+        self._imgpath = os.path.join('%s', '%s','%s',type,'%s.jpg')
         self.ids = list()
         self.image_names = list()
-        for (year, name) in image_sets:
-            rootpath = os.path.join(self.root, 'VOC' + year)
-            for line in open(os.path.join(rootpath, 'ImageSets', 'Main', name + '.txt')):
-                self.ids.append((rootpath, line.strip()))
-                self.image_names.append(line.strip())
+        for line in open(os.path.join(self.root, 'imageSets', self.name + '.txt')):
+            self.ids.append(tuple([self.root]+line.strip().split('/')))
+            nn = line.strip().split('/')
+            self.image_names.append("{}_{}_{}".format(*line.strip().split('/')))
+        if skip:
+            self.ids = [x for i, x in enumerate(self.ids) if i%skip==0]
+            self.image_names = [x for i, x in enumerate(self.image_names) if i%skip==0]
         self.num_samples = len(self.ids)
 
     def __getitem__(self, index):
@@ -131,62 +122,93 @@ class GetDataset(data.Dataset):
     def __len__(self):
         return len(self.ids)
 
+    def _difficult_condition(self,line):
+
+        label = line[0]
+        bbox = [int(i) for i in line[1:5]]
+        occ = int(line[5])
+        ignore = int(line[10])
+        vrate = (float(line[9]) * float(line[8])) / ((float(line[3]) + 1e-14) * (float(line[4]) + 1e-14))
+        if label != 'person' or bbox[3] < 45 or ignore>0 or bbox[0]<5 or bbox[1]<5 or (bbox[0]+bbox[2])>635 or (bbox[1]+bbox[3])>475:
+            return 1
+        elif occ > 1 and  vrate <0.65:
+            return 1
+        else:
+            return 0
+
+    def _anno_parser(self,filename):
+        res = []
+        with open(filename) as f:
+            for line in f:
+                line = line.strip().split()
+                if line[0] == "%":
+                    continue
+                else:
+                    difficult = self._difficult_condition(line)
+                    box = [int(i) for i in line[1:5]]
+                    ##bbox format "xywh"
+                    ## convert to "xmin,ymin, xmax, ymax"
+                    x, y, w, h = box
+                    xmin = (x)
+                    ymin = (y)
+                    xmax = (x + w)
+                    ymax = (y + h)
+                    label = "person"
+                    box = [xmin, ymin, xmax, ymax]
+                    info = {'name':label,'bbox':box,'difficult':difficult}
+                    res.append(info)
+        return res
+
+    def pull_gt_by_class(self,classname):
+
+        class_recs = {}
+        npos = 0
+        di = 0
+        for i in range(self.num_samples):
+            id = self.ids[i]
+            img_name = self.image_names[i]
+
+            gt = self._anno_parser(self._annopath%id )
+
+            # R = [obj for obj in gt if obj['name'] == classname]
+            R = [obj for obj in gt if obj['name'] == classname]
+            bbox = np.array([x['bbox'] for x in R])
+            difficult = np.array([x['difficult'] for x in R]).astype(np.bool)
+            det = [False] * len(R)
+            npos = npos + sum(~difficult)
+            di = di + sum(difficult)
+            class_recs[img_name] = {'bbox': bbox,
+                                     'difficult': difficult,
+                                     'det': det}
+        print (di)
+        return class_recs,npos
+
+
     def pull_item(self, index):
         img_id = self.ids[index]
 
-        target = ET.parse(self._annopath % img_id).getroot()
+        target_path = self._annopath % img_id
         img = cv2.imread(self._imgpath % img_id)
         height, width, channels = img.shape
 
         if self.target_transform is not None:
-            target = self.target_transform(target, width, height)
+            target = self.target_transform(target_path, width, height)
 
-        if self.transform is not None:
+
+        if len(target) ==0 and self.transform is not None:
+            img,_,_ = self.transform(img)
+            img = img[:, :, (2, 1, 0)]
+            print(target_path)
+        elif self.transform is not None:
             target = np.array(target)
             img, boxes, labels = self.transform(img, target[:, :4], target[:, 4])
             # to rgb
             img = img[:, :, (2, 1, 0)]
             # img = img.transpose(2, 0, 1)
             target = np.hstack((boxes, np.expand_dims(labels, axis=1)))
+
         return torch.from_numpy(img).permute(2, 0, 1), target, height, width
         # return torch.from_numpy(img), target, height, width
-
-    def _anno_parser(self,filename):
-        """ Parse a PASCAL VOC xml file """
-        tree = ET.parse(filename)
-        objects = []
-        for obj in tree.findall('object'):
-            obj_struct = {}
-            obj_struct['name'] = obj.find('name').text
-            obj_struct['pose'] = obj.find('pose').text
-            obj_struct['truncated'] = int(obj.find('truncated').text)
-            obj_struct['difficult'] = int(obj.find('difficult').text)
-            bbox = obj.find('bndbox')
-            obj_struct['bbox'] = [int(bbox.find('xmin').text) - 1,
-                                  int(bbox.find('ymin').text) - 1,
-                                  int(bbox.find('xmax').text) - 1,
-                                  int(bbox.find('ymax').text) - 1]
-            objects.append(obj_struct)
-
-        return objects
-    def pull_gt_by_class(self,classname):
-        # read list of images
-        class_recs = {}
-        npos = 0
-        for i in range(self.num_samples):
-            id = self.ids[i]
-            img_name = id[-1]
-            gt = self._anno_parser(self._annopath%id )
-
-            R = [obj for obj in gt if obj['name'] == classname]
-            bbox = np.array([x['bbox'] for x in R])
-            difficult = np.array([x['difficult'] for x in R]).astype(np.bool)
-            det = [False] * len(R)
-            npos = npos + sum(~difficult)
-            class_recs[img_name] = {'bbox': bbox,
-                                     'difficult': difficult,
-                                     'det': det}
-        return class_recs,npos
 
     def pull_image(self, index):
         '''Returns the original image object at index in PIL form
@@ -202,7 +224,7 @@ class GetDataset(data.Dataset):
         img_id = self.ids[index]
         return cv2.imread(self._imgpath % img_id, cv2.IMREAD_COLOR)
 
-    def pull_anno(self, index):
+    def pull_anno(self, index,img_width,img_height):
         '''Returns the original annotation of image at index
 
         Note: not using self.__getitem__(), as any transformations passed in
@@ -215,8 +237,8 @@ class GetDataset(data.Dataset):
                 eg: ('001718', [('dog', (96, 13, 438, 332))])
         '''
         img_id = self.ids[index]
-        anno = ET.parse(self._annopath % img_id).getroot()
-        gt = self.target_transform(anno, 1, 1)
+        anno = self._annopath % img_id
+        gt = self.target_transform(anno, img_width, img_height)
         return img_id[1], gt
 
     def pull_tensor(self, index):
@@ -251,3 +273,6 @@ def detection_collate(batch):
         imgs.append(sample[0])
         targets.append(torch.FloatTensor(sample[1]))
     return torch.stack(imgs, 0), targets
+
+if __name__ == "__main__":
+    dataset = GetDataset(DatasetRoot,SSDAugmentation(),AnnotationTransform())

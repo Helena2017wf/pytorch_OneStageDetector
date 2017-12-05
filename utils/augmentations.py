@@ -398,20 +398,33 @@ class PhotometricDistort(object):
 
 
 class SSDAugmentation(object):
-    def __init__(self, size=300, mean=(104, 117, 123)):
+    def __init__(self, size=300, mean=(104, 117, 123),type='visible'):
         self.mean = mean
         self.size = size
-        self.augment = Compose([
-            ConvertFromInts(),
-            ToAbsoluteCoords(),
-            PhotometricDistort(),
-            Expand(self.mean),
-            RandomSampleCrop(),
-            RandomMirror(),
-            ToPercentCoords(),
-            Resize(self.size),
-            SubtractMeans(self.mean)
-        ])
+        if type=='visible':
+            self.augment = Compose([
+                ConvertFromInts(),
+                ToAbsoluteCoords(),
+                PhotometricDistort(),
+                Expand(self.mean),
+                RandomSampleCrop(),
+                RandomMirror(),
+                ToPercentCoords(),
+                Resize(self.size),
+                SubtractMeans(self.mean)
+            ])
+        else:
+            self.augment = Compose([
+                ConvertFromInts(),
+                ToAbsoluteCoords(),
+                # PhotometricDistort(),
+                Expand(self.mean),
+                RandomSampleCrop(),
+                RandomMirror(),
+                ToPercentCoords(),
+                Resize(self.size),
+                SubtractMeans(self.mean)
+            ])
 
     def __call__(self, img, boxes, labels):
         return self.augment(img, boxes, labels)

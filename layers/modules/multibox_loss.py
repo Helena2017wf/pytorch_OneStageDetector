@@ -79,7 +79,7 @@ class MultiBoxLoss(nn.Module):
 
         pos = conf_t > 0
         num_pos = pos.sum(keepdim=True)
-
+        # print("num_pos",num_pos)
         # Localization Loss (Smooth L1)
         # Shape: [batch,num_priors,4]
         pos_idx = pos.unsqueeze(pos.dim()).expand_as(loc_data)
@@ -104,7 +104,10 @@ class MultiBoxLoss(nn.Module):
         # Confidence Loss Including Positive and Negative Examples
         pos_idx = pos.unsqueeze(2).expand_as(conf_data)
         neg_idx = neg.unsqueeze(2).expand_as(conf_data)
-        conf_p = conf_data[(pos_idx+neg_idx).gt(0)].view(-1, self.num_classes)
+        test1 = (pos_idx+neg_idx).gt(0)
+        test2 = conf_data[test1]
+        conf_p = test2.view(-1,self.num_classes)
+        # conf_p = conf_data[(pos_idx+neg_idx).gt(0)].view(-1, self.num_classes)
         targets_weighted = conf_t[(pos+neg).gt(0)]
         loss_c = F.cross_entropy(conf_p, targets_weighted, size_average=False)
 
