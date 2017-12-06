@@ -18,10 +18,10 @@ def str2bool(v):
     return v.lower() in ("yes", "true", "t", "1")
 
 parser = argparse.ArgumentParser(description='Single Shot MultiBox Detector Training')
-parser.add_argument('--version', default='300', help='conv11_2(v2) or pool6(v1) as last layer')
+parser.add_argument('--version', default='512', help='conv11_2(v2) or pool6(v1) as last layer')
 parser.add_argument('--basenet', default='vgg16_reducedfc.pth', help='pretrained base model')
 parser.add_argument('--jaccard_threshold', default=0.5, type=float, help='Min Jaccard index for matching')
-parser.add_argument('--batch_size', default=16, type=int, help='Batch size for training')
+parser.add_argument('--batch_size', default=8, type=int, help='Batch size for training')
 parser.add_argument('--resume', default=None, type=str, help='Resume from checkpoint')
 parser.add_argument('--num_workers', default=2, type=int, help='Number of workers used in dataloading')
 parser.add_argument('--iterations', default=120000, type=int, help='Number of training iterations')
@@ -32,7 +32,7 @@ parser.add_argument('--momentum', default=0.9, type=float, help='momentum')
 parser.add_argument('--weight_decay', default=5e-4, type=float, help='Weight decay for SGD')
 parser.add_argument('--gamma', default=0.1, type=float, help='Gamma update for SGD')
 parser.add_argument('--log_iters', default=True, type=bool, help='Print the loss at each iteration')
-parser.add_argument('--visdom', default=True, type=str2bool, help='Use visdom to for loss visualization')
+parser.add_argument('--visdom', default=False, type=str2bool, help='Use visdom to for loss visualization')
 parser.add_argument('--send_images_to_visdom', type=str2bool, default=False, help='Sample a random image from each 10th batch, send it to visdom after augmentations step')
 parser.add_argument('--save_folder', default='weights/', help='Location to save checkpoint models')
 parser.add_argument('--voc_root', default=DatasetRoot, help='Location of VOC root directory')
@@ -50,11 +50,11 @@ if not os.path.exists(args.save_folder):
 
 # train_sets = [('2007', 'trainval'), ('2012', 'trainval')]
 # train_sets = 'train'
-ssd_dim = 300  # only support 300 now
+ssd_dim = int(args.version)  # only support 300 now
 means = (104, 117, 123)  # only support voc now
 num_classes = len(CLASSES) + 1
 batch_size = args.batch_size
-accum_batch_size = 32
+accum_batch_size = 16
 iter_size = accum_batch_size / batch_size
 max_iter = 120000
 weight_decay = 0.0005
@@ -212,7 +212,7 @@ def train():
                 )
         if iteration % 5000 == 0:
             print('Saving state, iter:', iteration)
-            torch.save(ssd_net.state_dict(), 'weights/ssd300_KAIST_' +
+            torch.save(ssd_net.state_dict(), 'weights/ssd300_KAIST_' + args.version +
                        repr(iteration) + '.pth')
     torch.save(ssd_net.state_dict(), args.save_folder + 'KAIST' + args.version + '.pth')
 

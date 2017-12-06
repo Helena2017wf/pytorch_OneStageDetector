@@ -32,56 +32,56 @@ class PriorBox(object):
     def forward(self):
         mean = []
         # TODO merge these
-        if self.version == 'v300':
-            for k, f in enumerate(self.feature_maps):
-                for i, j in product(range(f), repeat=2):
-                    f_k = self.image_size / self.steps[k]
-                    # unit center x,y
-                    cx = (j + 0.5) / f_k
-                    cy = (i + 0.5) / f_k
+        #if self.version == 'v300':
+        for k, f in enumerate(self.feature_maps):
+            for i, j in product(range(f), repeat=2):
+                f_k = self.image_size / self.steps[k]
+                # unit center x,y
+                cx = (j + 0.5) / f_k
+                cy = (i + 0.5) / f_k
 
-                    # aspect_ratio: 1
-                    # rel size: min_size
-                    s_k = self.min_sizes[k]/self.image_size
-                    mean += [cx, cy, s_k, s_k]
+                # aspect_ratio: 1
+                # rel size: min_size
+                s_k = self.min_sizes[k]/self.image_size
+                mean += [cx, cy, s_k, s_k]
 
-                    # aspect_ratio: 1
-                    # rel size: sqrt(s_k * s_(k+1))
-                    s_k_prime = sqrt(s_k * (self.max_sizes[k]/self.image_size))
-                    mean += [cx, cy, s_k_prime, s_k_prime]
+                # aspect_ratio: 1
+                # rel size: sqrt(s_k * s_(k+1))
+                s_k_prime = sqrt(s_k * (self.max_sizes[k]/self.image_size))
+                mean += [cx, cy, s_k_prime, s_k_prime]
 
-                    # rest of aspect ratios
-                    for ar in self.aspect_ratios[k]:
-                        mean += [cx, cy, s_k*sqrt(ar), s_k/sqrt(ar)]
-                        mean += [cx, cy, s_k/sqrt(ar), s_k*sqrt(ar)]
+                # rest of aspect ratios
+                for ar in self.aspect_ratios[k]:
+                    mean += [cx, cy, s_k*sqrt(ar), s_k/sqrt(ar)]
+                    mean += [cx, cy, s_k/sqrt(ar), s_k*sqrt(ar)]
 
-        else:
-            # original version generation of prior (default) boxes
-            for i, k in enumerate(self.feature_maps):
-                step_x = step_y = self.image_size/k
-                for h, w in product(range(k), repeat=2):
-                    c_x = ((w+0.5) * step_x)
-                    c_y = ((h+0.5) * step_y)
-                    c_w = c_h = self.min_sizes[i] / 2
-                    s_k = self.image_size  # 300
-                    # aspect_ratio: 1,
-                    # size: min_size
-                    mean += [(c_x-c_w)/s_k, (c_y-c_h)/s_k,
-                             (c_x+c_w)/s_k, (c_y+c_h)/s_k]
-                    if self.max_sizes[i] > 0:
-                        # aspect_ratio: 1
-                        # size: sqrt(min_size * max_size)/2
-                        c_w = c_h = sqrt(self.min_sizes[i] *
-                                         self.max_sizes[i])/2
-                        mean += [(c_x-c_w)/s_k, (c_y-c_h)/s_k,
-                                 (c_x+c_w)/s_k, (c_y+c_h)/s_k]
-                    # rest of prior boxes
-                    for ar in self.aspect_ratios[i]:
-                        if not (abs(ar-1) < 1e-6):
-                            c_w = self.min_sizes[i] * sqrt(ar)/2
-                            c_h = self.min_sizes[i] / sqrt(ar)/2
-                            mean += [(c_x-c_w)/s_k, (c_y-c_h)/s_k,
-                                     (c_x+c_w)/s_k, (c_y+c_h)/s_k]
+        # else:
+        #     # original version generation of prior (default) boxes
+        #     for i, k in enumerate(self.feature_maps):
+        #         step_x = step_y = self.image_size/k
+        #         for h, w in product(range(k), repeat=2):
+        #             c_x = ((w+0.5) * step_x)
+        #             c_y = ((h+0.5) * step_y)
+        #             c_w = c_h = self.min_sizes[i] / 2
+        #             s_k = self.image_size  # 300
+        #             # aspect_ratio: 1,
+        #             # size: min_size
+        #             mean += [(c_x-c_w)/s_k, (c_y-c_h)/s_k,
+        #                      (c_x+c_w)/s_k, (c_y+c_h)/s_k]
+        #             if self.max_sizes[i] > 0:
+        #                 # aspect_ratio: 1
+        #                 # size: sqrt(min_size * max_size)/2
+        #                 c_w = c_h = sqrt(self.min_sizes[i] *
+        #                                  self.max_sizes[i])/2
+        #                 mean += [(c_x-c_w)/s_k, (c_y-c_h)/s_k,
+        #                          (c_x+c_w)/s_k, (c_y+c_h)/s_k]
+        #             # rest of prior boxes
+        #             for ar in self.aspect_ratios[i]:
+        #                 if not (abs(ar-1) < 1e-6):
+        #                     c_w = self.min_sizes[i] * sqrt(ar)/2
+        #                     c_h = self.min_sizes[i] / sqrt(ar)/2
+        #                     mean += [(c_x-c_w)/s_k, (c_y-c_h)/s_k,
+        #                              (c_x+c_w)/s_k, (c_y+c_h)/s_k]
         # back to torch land
         output = torch.Tensor(mean).view(-1, 4)
         if self.clip:
