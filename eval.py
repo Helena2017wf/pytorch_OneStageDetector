@@ -699,6 +699,6 @@ def run_evaluation():
 if __name__ == '__main__':
 
     # run_evaluation()
-    dataset = GetDataset(args.voc_root, BaseTransform(300, dataset_mean), AnnotationTransform(), [('2007','test')])
+    dataset = GetDataset(args.voc_root, BaseTransform(300, dataset_mean), AnnotationTransform(), dataset_name='test20',skip=0)
 
-    do_python_eval(dataset,"ssd300_120000/VOC0712/")
+    do_python_eval(dataset,"ssd300_120000/KAIST/")

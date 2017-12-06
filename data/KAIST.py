@@ -45,6 +45,19 @@ class AnnotationTransform(object):
             zip(CLASSES, range(len(CLASSES))))
         self.keep_difficult = keep_difficult
 
+    def _difficult_condition(self,line):
+
+        label = line[0]
+        bbox = [int(i) for i in line[1:5]]
+        occ = int(line[5])
+        ignore = int(line[10])
+        vrate = (float(line[9]) * float(line[8])) / ((float(line[3]) + 1e-14) * (float(line[4]) + 1e-14))
+        if label != 'person' or bbox[3] < 45 or ignore>0 or bbox[0]<5 or bbox[1]<5 or (bbox[0]+bbox[2])>635 or (bbox[1]+bbox[3])>475:
+            return 1
+        elif occ > 1 and  vrate <0.65:
+            return 1
+        else:
+            return 0
 
     def __call__(self, target, width, height):
         """
@@ -61,8 +74,8 @@ class AnnotationTransform(object):
                 if line[0] == "%":
                     continue
                 else:
-                    text = line[0]
-                    if text in ['person','cyclist']:
+                    difficult = self._difficult_condition(line)
+                    if not difficult or self.keep_difficult:
                         box = [int(i) for i in line[1:5]]
                         ##bbox format "xywh"
                         ## convert to "xmin,ymin, xmax, ymax"
@@ -95,7 +108,7 @@ class GetDataset(data.Dataset):
     """
 
     def __init__(self, root, transform=None, target_transform=None,
-                 type='visible',dataset_name='train01_valid_only_person',skip=0):
+                 type='visible',dataset_name='train02_wo_difficult',skip=0):
         self.root = root
         self.type = type
         self.name = dataset_name

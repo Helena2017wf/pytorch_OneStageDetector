@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
-from data import v2 as cfg
+from data import get_config
 from ..box_utils import match, log_sum_exp
 
 class MultiBoxLoss(nn.Module):
@@ -28,7 +28,7 @@ class MultiBoxLoss(nn.Module):
         See: https://arxiv.org/pdf/1512.02325.pdf for more details.
     """
 
-    def __init__(self, num_classes, overlap_thresh, prior_for_matching,
+    def __init__(self, num_classes, size, overlap_thresh, prior_for_matching,
                  bkg_label, neg_mining, neg_pos, neg_overlap, encode_target,
                  use_gpu=True):
         super(MultiBoxLoss, self).__init__()
@@ -41,6 +41,7 @@ class MultiBoxLoss(nn.Module):
         self.do_neg_mining = neg_mining
         self.negpos_ratio = neg_pos
         self.neg_overlap = neg_overlap
+        cfg = get_config(str(size))
         self.variance = cfg['variance']
 
     def forward(self, predictions, targets):

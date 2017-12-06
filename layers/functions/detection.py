@@ -4,7 +4,7 @@ import torch.backends.cudnn as cudnn
 from torch.autograd import Function
 from torch.autograd import Variable
 from ..box_utils import decode, nms
-from data import v2 as cfg
+from data import get_config
 
 
 class Detect(Function):
@@ -13,7 +13,7 @@ class Detect(Function):
     scores and threshold to a top_k number of output predictions for both
     confidence score and locations.
     """
-    def __init__(self, num_classes, bkg_label, top_k, conf_thresh, nms_thresh):
+    def __init__(self, num_classes,size, bkg_label, top_k, conf_thresh, nms_thresh):
         self.num_classes = num_classes
         self.background_label = bkg_label
         self.top_k = top_k
@@ -22,6 +22,7 @@ class Detect(Function):
         if nms_thresh <= 0:
             raise ValueError('nms_threshold must be non negative.')
         self.conf_thresh = conf_thresh
+        cfg = get_config(str(size))
         self.variance = cfg['variance']
         self.output = torch.zeros(1, self.num_classes, self.top_k, 5)
 

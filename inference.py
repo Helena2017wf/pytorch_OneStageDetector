@@ -21,7 +21,7 @@ from ssd import build_ssd
 # from models import build_ssd as build_ssd_v1 # uncomment for older pool6 model
 
 net = build_ssd('test', 300, 2)    # initialize SSD
-net.load_weights('weights/KAISTv2.pth')
+net.load_weights('weights/KAIST_300_alltype.pth')
 
 from matplotlib import pyplot as plt
 from data import GetDataset, DatasetRoot, AnnotationTransform
