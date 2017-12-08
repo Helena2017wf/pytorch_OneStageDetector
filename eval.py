@@ -35,7 +35,7 @@ def str2bool(v):
     return v.lower() in ("yes", "true", "t", "1")
 
 parser = argparse.ArgumentParser(description='Single Shot MultiBox Detection')
-parser.add_argument('--trained_model', default='weights/v2.pth',
+parser.add_argument('--trained_model', default='weights/ssd300_KAIST_51275000.pth',
                     type=str, help='Trained state_dict file path to open')
 parser.add_argument('--save_folder', default='eval/', type=str,
                     help='File path to save results')
@@ -59,6 +59,7 @@ else:
 
 dataset_mean = (104, 117, 123)
 
+input_dim = 512
 # annopath = os.path.join(args.voc_root, 'VOC2007', 'Annotations', '%s.xml')
 # imgpath = os.path.join(args.voc_root, 'VOC2007', 'JPEGImages', '%s.jpg')
 # imgsetpath = os.path.join(args.voc_root, 'VOC2007', 'ImageSets', 'Main', '{:s}.txt')
@@ -628,7 +629,7 @@ def test_net(save_folder, net, cuda, dataset, transform, top_k,
     # timers
 
     _t = {'im_detect': Timer(), 'misc': Timer()}
-    output_dir = get_output_dir('ssd300_120000', DATASET_NAME)
+    output_dir = get_output_dir('ssd512_120000', DATASET_NAME)
     det_file = os.path.join(output_dir, 'detections.pkl')
 
     index = 0
@@ -679,26 +680,26 @@ def evaluate_detections(box_list, output_dir, dataset):
 def run_evaluation():
 
     num_classes = len(CLASSES) + 1 # +1 background
-    net = build_ssd('test', 300, num_classes) # initialize SSD
+    net = build_ssd('test', input_dim, num_classes) # initialize SSD
     net.load_state_dict(torch.load(args.trained_model))
     net.eval()
     print('Finished loading model!')
     # load data
     if DATASET_NAME == 'KAIST':
-        dataset = GetDataset(args.voc_root, BaseTransform(300, dataset_mean), AnnotationTransform(),dataset_name='test20',skip=0)
+        dataset = GetDataset(args.voc_root, BaseTransform(input_dim, dataset_mean), AnnotationTransform(),dataset_name='test20',skip=0)
     else:
-        dataset = GetDataset(args.voc_root, BaseTransform(300, dataset_mean), AnnotationTransform(),[('2007','test')])
+        dataset = GetDataset(args.voc_root, BaseTransform(input_dim, dataset_mean), AnnotationTransform(),[('2007','test')])
     if args.cuda:
         net = net.cuda()
         cudnn.benchmark = True
     # evaluation
     test_net(args.save_folder, net, args.cuda, dataset,
-             BaseTransform(net.size, dataset_mean), args.top_k, 300,
+             BaseTransform(net.size, dataset_mean), args.top_k, input_dim,
              thresh=args.confidence_threshold)
 
 if __name__ == '__main__':
 
-    # run_evaluation()
-    dataset = GetDataset(args.voc_root, BaseTransform(300, dataset_mean), AnnotationTransform(), dataset_name='test20',skip=0)
-
-    do_python_eval(dataset,"ssd300_120000/KAIST/")
+    run_evaluation()
+    # dataset = GetDataset(args.voc_root, BaseTransform(300, dataset_mean), AnnotationTransform(), dataset_name='test20',skip=0)
+    #
+    # do_python_eval(dataset,"ssd300_120000/KAIST/")

@@ -19,9 +19,11 @@ from data import CLASSES as labels
 
 from ssd import build_ssd
 # from models import build_ssd as build_ssd_v1 # uncomment for older pool6 model
+input_dim = 512
 
-net = build_ssd('test', 300, 2)    # initialize SSD
-net.load_weights('weights/KAIST_300_alltype.pth')
+net = build_ssd('test', input_dim, 2)    # initialize SSD
+
+net.load_weights('weights/ssd300_KAIST_51280000.pth')
 
 from matplotlib import pyplot as plt
 from data import GetDataset, DatasetRoot, AnnotationTransform
@@ -38,7 +40,7 @@ for index in range(testset.num_samples):
     # View the sampled input image before transform
 
 
-    x = cv2.resize(image, (300, 300)).astype(np.float32)
+    x = cv2.resize(image, (input_dim, input_dim)).astype(np.float32)
     x -= (104.0, 117.0, 123.0)
     x = x.astype(np.float32)
     x = x[:, :, ::-1].copy()
@@ -76,6 +78,6 @@ for index in range(testset.num_samples):
     for k in anno:
         coords = (int(k[0]*img_width),int(k[1]*img_height)) , int((k[2]-k[0])*img_width),int((k[3]-k[1])*img_height)
         currentAxis.add_patch(plt.Rectangle(*coords, fill=False, edgecolor='g', linewidth=2))
-    plt.pause(1)
+    plt.pause(0.001)
     plt.draw()
     plt.gcf().clear()

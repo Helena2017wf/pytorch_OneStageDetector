@@ -7,18 +7,27 @@ import torch.nn.init as init
 import argparse
 from torch.autograd import Variable
 import torch.utils.data as data
-from data import get_config, DatasetRoot,GetDataset,AnnotationTransform,CLASSES,detection_collate
+from data import get_config, DatasetRoot,GetDataset,AnnotationTransform,CLASSES,detection_collate,DATASET_NAME
 from utils.augmentations import SSDAugmentation
 from layers.modules import MultiBoxLoss
 from ssd import build_ssd
 import numpy as np
 import time
 
+def print_network(model, name):
+    num_params = 0
+    for p in model.parameters():
+        num_params += p.numel()
+    print(name)
+    print(model)
+    print("The number of parameters: {}".format(num_params))
+
 def str2bool(v):
     return v.lower() in ("yes", "true", "t", "1")
 
 parser = argparse.ArgumentParser(description='Single Shot MultiBox Detector Training')
 parser.add_argument('--version', default='512', help='conv11_2(v2) or pool6(v1) as last layer')
+parser.add_argument('--img_type', default='visible', help='format of image (visible, lwir,...)')
 parser.add_argument('--basenet', default='vgg16_reducedfc.pth', help='pretrained base model')
 parser.add_argument('--jaccard_threshold', default=0.5, type=float, help='Min Jaccard index for matching')
 parser.add_argument('--batch_size', default=8, type=int, help='Batch size for training')
@@ -32,8 +41,8 @@ parser.add_argument('--momentum', default=0.9, type=float, help='momentum')
 parser.add_argument('--weight_decay', default=5e-4, type=float, help='Weight decay for SGD')
 parser.add_argument('--gamma', default=0.1, type=float, help='Gamma update for SGD')
 parser.add_argument('--log_iters', default=True, type=bool, help='Print the loss at each iteration')
-parser.add_argument('--visdom', default=False, type=str2bool, help='Use visdom to for loss visualization')
-parser.add_argument('--send_images_to_visdom', type=str2bool, default=False, help='Sample a random image from each 10th batch, send it to visdom after augmentations step')
+parser.add_argument('--visdom', default=True, type=str2bool, help='Use visdom to for loss visualization')
+parser.add_argument('--send_images_to_visdom', type=str2bool, default=True, help='Sample a random image from each 10th batch, send it to visdom after augmentations step')
 parser.add_argument('--save_folder', default='weights/', help='Location to save checkpoint models')
 parser.add_argument('--voc_root', default=DatasetRoot, help='Location of VOC root directory')
 args = parser.parse_args()
@@ -68,7 +77,7 @@ if args.visdom:
 
 ssd_net = build_ssd('train', ssd_dim, num_classes)
 net = ssd_net
-
+print_network(net,args.version)
 if args.cuda:
     net = torch.nn.DataParallel(ssd_net)
     cudnn.benchmark = True
@@ -107,6 +116,7 @@ optimizer = optim.SGD(net.parameters(), lr=args.lr,
 criterion = MultiBoxLoss(num_classes, ssd_dim, 0.5, True, 0, True, 3, 0.5, False, args.cuda)
 
 
+
 def train():
     net.train()
     # loss counters
@@ -114,9 +124,8 @@ def train():
     conf_loss = 0
     epoch = 0
     print('Loading Dataset...')
-
     dataset = GetDataset(args.voc_root, SSDAugmentation(
-        ssd_dim, means), AnnotationTransform(),skip=2)
+        ssd_dim, means,type=args.img_type), AnnotationTransform(),type=args.img_type)
 
     epoch_size = len(dataset) // args.batch_size
     print('Training SSD on', dataset.name)
@@ -212,9 +221,9 @@ def train():
                 )
         if iteration % 5000 == 0:
             print('Saving state, iter:', iteration)
-            torch.save(ssd_net.state_dict(), 'weights/ssd300_KAIST_' + args.version +
+            torch.save(ssd_net.state_dict(), 'weights/ssd_' + args.version +'_'+ DATASET_NAME + "_" + args.img_type + "_" +
                        repr(iteration) + '.pth')
-    torch.save(ssd_net.state_dict(), args.save_folder + 'KAIST' + args.version + '.pth')
+    torch.save(ssd_net.state_dict(), args.save_folder + 'ssd_' + args.version + '_'+ DATASET_NAME + "_" + args.img_type + '.pth')
 
 
 def adjust_learning_rate(optimizer, gamma, step):
