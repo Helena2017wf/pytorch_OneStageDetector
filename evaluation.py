@@ -35,7 +35,7 @@ def str2bool(v):
     return v.lower() in ("yes", "true", "t", "1")
 
 parser = argparse.ArgumentParser(description='Single Shot MultiBox Detection')
-parser.add_argument('--trained_model', default='weights/ssd300_KAIST_51275000.pth',
+parser.add_argument('--trained_model', default='weights/VOC300.pth',
                     type=str, help='Trained state_dict file path to open')
 parser.add_argument('--save_folder', default='eval/', type=str,
                     help='File path to save results')
@@ -59,7 +59,7 @@ else:
 
 dataset_mean = (104, 117, 123)
 
-input_dim = 512
+input_dim = 300
 # annopath = os.path.join(args.voc_root, 'VOC2007', 'Annotations', '%s.xml')
 # imgpath = os.path.join(args.voc_root, 'VOC2007', 'JPEGImages', '%s.jpg')
 # imgsetpath = os.path.join(args.voc_root, 'VOC2007', 'ImageSets', 'Main', '{:s}.txt')
@@ -202,12 +202,10 @@ def do_python_eval(dataset,output_dir='output', use_07=True):
     for ap in aps:
         print('{:.3f}'.format(ap))
     print('{:.3f}'.format(np.mean(aps)))
-    print('~~~~~~~~')
-    print('')
-    print('--------------------------------------------------------------')
-    print('Results computed with the **unofficial** Python eval code.')
-    print('Results should be very close to the official MATLAB eval code.')
-    print('--------------------------------------------------------------')
+
+    map = np.mean(aps)
+    mam = np.mean(ams)
+    return map,mam
 
 
 def voc_ap(rec, prec, use_07_metric=True):
@@ -637,7 +635,7 @@ def test_net(save_folder, net, cuda, dataset, transform, top_k,
         im, gt, h, w = dataset.pull_item(i)
         # if not len(gt): ### some image dont have gt
         #     continue
-        print("%s/%s"%(index,num_images))
+        # print("%s/%s"%(index,num_images))
         index = index+1
         x = Variable(im.unsqueeze(0))
         if args.cuda:
@@ -663,43 +661,53 @@ def test_net(save_folder, net, cuda, dataset, transform, top_k,
                 .astype(np.float32, copy=False)
             all_boxes[j][i] = cls_dets
         #all boxes format [classes(2)][num_images][coordinates and score]
-        print('im_detect: {:d}/{:d} {:.3f}s'.format(i + 1,
-                                                    num_images, detect_time))
+        # print('im_detect: {:d}/{:d} {:.3f}s'.format(i + 1,
+        #                                             num_images, detect_time))
 
     with open(det_file, 'wb') as f:
         pickle.dump(all_boxes, f, pickle.HIGHEST_PROTOCOL)
 
     print('Evaluating detections')
-    evaluate_detections(all_boxes, output_dir, dataset)
+    map, mam = evaluate_detections(all_boxes, output_dir, dataset)
+    return map,mam
 
 
 def evaluate_detections(box_list, output_dir, dataset):
     write_results_file(box_list, dataset)
-    do_python_eval(dataset,output_dir)
+    map, mam = do_python_eval(dataset,output_dir)
 
-def run_evaluation():
+    return map,mam
 
+def run_evaluation(size = None, model_name = None):
+
+    if not model_name:
+        model_name = args.trained_model
+    if not size:
+        size = input_dim
     num_classes = len(CLASSES) + 1 # +1 background
-    net = build_ssd('test', input_dim, num_classes) # initialize SSD
-    net.load_state_dict(torch.load(args.trained_model))
+    net = build_ssd('test', size, num_classes) # initialize SSD
+    net.load_state_dict(torch.load(model_name))
     net.eval()
     print('Finished loading model!')
     # load data
     if DATASET_NAME == 'KAIST':
-        dataset = GetDataset(args.voc_root, BaseTransform(input_dim, dataset_mean), AnnotationTransform(),dataset_name='test20',skip=0)
+        dataset = GetDataset(args.voc_root, BaseTransform(size, dataset_mean), AnnotationTransform(),dataset_name='test20',skip=0)
     else:
-        dataset = GetDataset(args.voc_root, BaseTransform(input_dim, dataset_mean), AnnotationTransform(),[('2007','test')])
+        dataset = GetDataset(args.voc_root, BaseTransform(size, dataset_mean), AnnotationTransform(),[('2007','test')])
     if args.cuda:
         net = net.cuda()
         cudnn.benchmark = True
     # evaluation
-    test_net(args.save_folder, net, args.cuda, dataset,
-             BaseTransform(net.size, dataset_mean), args.top_k, input_dim,
+    map, mam = test_net(args.save_folder, net, args.cuda, dataset,
+             BaseTransform(net.size, dataset_mean), args.top_k, size,
              thresh=args.confidence_threshold)
+    return map, mam
 
 if __name__ == '__main__':
 
-    run_evaluation()
+    map, mam = run_evaluation(size=300,model_name="weights/VOC300.pth")
+
+    print("map:",map,"mam",mam)
     # dataset = GetDataset(args.voc_root, BaseTransform(300, dataset_mean), AnnotationTransform(), dataset_name='test20',skip=0)
     #
     # do_python_eval(dataset,"ssd300_120000/KAIST/")

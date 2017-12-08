@@ -211,7 +211,7 @@ class GetDataset(data.Dataset):
         if len(target) ==0 and self.transform is not None:
             img,_,_ = self.transform(img)
             img = img[:, :, (2, 1, 0)]
-            print(target_path)
+            # print(target_path)
         elif self.transform is not None:
             target = np.array(target)
             img, boxes, labels = self.transform(img, target[:, :4], target[:, 4])
