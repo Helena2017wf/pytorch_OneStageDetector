@@ -18,7 +18,13 @@ WORKERS = 4
 
 #SSD300 CONFIGS
 # newer version: use additional conv11_2 layer as last layer before multibox layers
-v512 = {
+SSD512 = {
+
+    'base': [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 'C', 512, 512, 512, 'M',
+             512, 512, 512],
+    'extra': [256, 'S', 512, 128, 'S', 256, 128, 'S', 256, 128,'S',256, 128,'L'],
+    'mbox': [4, 6, 6, 6, 6, 4, 4],
+
     'feature_maps' : [64, 32, 16, 8, 4, 2, 1],
 
     'min_dim' : 512,
@@ -37,10 +43,17 @@ v512 = {
 
     'clip' : True,
 
-    'name' : 'v512',
+    'name' : 'SSD512',
 }
 
-v300 = {
+SSD300 = {
+
+    'base':[64, 64, 'M', 128, 128, 'M', 256, 256, 256, 'C', 512, 512, 512, 'M',
+            512, 512, 512],
+    'extra':[256, 'S', 512, 128, 'S', 256, 128, 256, 128, 256],
+    'mbox': [4, 4, 4, 4, 4, 4],
+
+
     'feature_maps' : [38, 19, 10, 5, 3, 1],
 
     'min_dim' : 300,
@@ -53,24 +66,51 @@ v300 = {
 
     # 'aspect_ratios' : [[2, 1/2], [2, 1/2, 3, 1/3], [2, 1/2, 3, 1/3],
     #                    [2, 1/2, 3, 1/3], [2, 1/2], [2, 1/2]],
-    'aspect_ratios' : [[2], [2, 3], [2, 3], [2, 3], [2], [2]],
+    # 'aspect_ratios' : [[2], [2, 3], [2, 3], [2, 3], [2], [2]],   ##### h/w  this is for VOC
+    ##TODO
+    'aspect_ratios': [[1,2.5], [1,2.5], [1,2.5], [1,2.5], [1,2.5], [1,2.5]],  ##### h/w   this is for pedestrain detection    RPN+BDT use the 2.5
+    'variance' : [0.1, 0.2],
+
+    'clip' : True,
+
+    'name' : 'SSD300',
+}
+
+PDN512 = {
+    ###scales: 0.04,0.155,0.27,0.385.0.5
+    'base':[64, 64, 'M', 128, 128, 'M', 256, 256, 256, 'C', 512, 512, 512, 'M',
+            512, 512, 512],
+
+    'mbox':[2, 2, 2, 2],
+
+    'feature_maps' : [128, 64, 32, 16],
+
+    'min_dim' : 512,
+
+    'steps' : [4,8, 16, 32],
+
+    'min_sizes' : [16, 32, 64, 128],
+
+    'max_sizes' : [32, 64, 128, 256],
+
+    # 'aspect_ratios' : [[2, 1/2], [2, 1/2, 3, 1/3], [2, 1/2, 3, 1/3],
+    #                    [2, 1/2, 3, 1/3], [2, 1/2], [2, 1/2]],
+    'aspect_ratios' : [[3], [3], [3], [3]],
 
     'variance' : [0.1, 0.2],
 
     'clip' : True,
 
-    'name' : 'v512',
+    'name' : 'PDN512',
 }
 
-
-
+config_factory = {
+    'SSD300': SSD300,
+    'SSD512': SSD512,
+    'PDN512': PDN512,
+}
 def get_config(name):
-
-    map = {
-           '300': v300,
-           '512': v512
-           }
-    return map[name]
+    return config_factory[name]
 
 # use average pooling layer as last layer before multibox layers
 # v1 = {

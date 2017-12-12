@@ -1,1 +1,19 @@
 
+weights/ssd_300_KAIST_visible_19999.pth
+Mean AP:0.460435487846
+Mean Miss Rate:0.629851713394
+weights/ssd_300_KAIST_visible_39999.pth
+Mean AP:0.482064854265
+Mean Miss Rate:0.609480813999
+weights/ssd_300_KAIST_visible_59999.pth
+Mean AP:0.496745049978
+Mean Miss Rate:0.601971287614
+weights/ssd_300_KAIST_visible_79999.pth
+Mean AP:0.480266846777
+Mean Miss Rate:0.610737730549
+weights/ssd_300_KAIST_visible_99999.pth
+Mean AP:0.476232298625
+Mean Miss Rate:0.613616303682
+weights/ssd_300_KAIST_visible_119999.pth
+Mean AP:0.472895112978
+Mean Miss Rate:0.613918993027

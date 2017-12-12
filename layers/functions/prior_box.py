@@ -43,18 +43,20 @@ class PriorBox(object):
                 # aspect_ratio: 1
                 # rel size: min_size
                 s_k = self.min_sizes[k]/self.image_size
-                mean += [cx, cy, s_k, s_k]
+                # mean += [cx, cy, s_k, s_k]   # do not need square bbox for PD
 
                 # aspect_ratio: 1
                 # rel size: sqrt(s_k * s_(k+1))
                 s_k_prime = sqrt(s_k * (self.max_sizes[k]/self.image_size))
-                mean += [cx, cy, s_k_prime, s_k_prime]
+                # mean += [cx, cy, s_k_prime, s_k_prime] # do not need square bbox for PD
 
                 # rest of aspect ratios
                 for ar in self.aspect_ratios[k]:
-                    mean += [cx, cy, s_k*sqrt(ar), s_k/sqrt(ar)]
-                    mean += [cx, cy, s_k/sqrt(ar), s_k*sqrt(ar)]
-
+                    ###TODO for modify the anchor shape
+                    # mean += [cx, cy, s_k*sqrt(ar), s_k/sqrt(ar)] ### w/h  for pedestrain detection, coment this line
+                    mean += [cx, cy, s_k/sqrt(ar), s_k*sqrt(ar)] ### h/w = 2/1
+                    mean += [cx, cy, s_k_prime / sqrt(ar), s_k_prime * sqrt(ar)]  ### h/w = 2/1 new added
+                    #### [cx,cy,w,h]
         # else:
         #     # original version generation of prior (default) boxes
         #     for i, k in enumerate(self.feature_maps):

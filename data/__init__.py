@@ -1,8 +1,8 @@
 # from .voc0712 import VOCDetection, AnnotationTransform, detection_collate, VOC_CLASSES,VOCroot
-from .voc0712 import DatasetRoot,GetDataset,AnnotationTransform,CLASSES,detection_collate, DATASET_NAME
-from .config import *
 import cv2
 import numpy as np
+
+from .KAIST import DatasetRoot,GetDataset,AnnotationTransform,CLASSES,detection_collate, DATASET_NAME
 
 
 def base_transform(image, size, mean):

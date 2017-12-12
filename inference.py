@@ -1,29 +1,23 @@
-import os
-import sys
 # module_path = os.path.abspath(os.path.join('..'))
 # if module_path not in sys.path:
 #     sys.path.append(module_path)
 
-import torch
-import torch.nn as nn
-import torch.backends.cudnn as cudnn
-from torch.autograd import Variable
-import torch.utils.data as data
-import torchvision.transforms as transforms
-from torch.utils.serialization import load_lua
-import numpy as np
 import cv2
+import numpy as np
+import torch
+from torch.autograd import Variable
+
 if torch.cuda.is_available():
     torch.set_default_tensor_type('torch.cuda.FloatTensor')
 from data import CLASSES as labels
 
-from ssd import build_ssd
+from Nets.ssd import build_ssd
 # from models import build_ssd as build_ssd_v1 # uncomment for older pool6 model
-input_dim = 512
+input_dim = 300
 
 net = build_ssd('test', input_dim, 2)    # initialize SSD
 
-net.load_weights('weights/ssd300_KAIST_51280000.pth')
+net.load_weights('weights/ssd_300_KAIST_visible_59999.pth')
 
 from matplotlib import pyplot as plt
 from data import GetDataset, DatasetRoot, AnnotationTransform

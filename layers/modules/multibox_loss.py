@@ -2,7 +2,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
-from data import get_config
 from ..box_utils import match, log_sum_exp
 
 class MultiBoxLoss(nn.Module):
@@ -28,7 +27,7 @@ class MultiBoxLoss(nn.Module):
         See: https://arxiv.org/pdf/1512.02325.pdf for more details.
     """
 
-    def __init__(self, num_classes, size, overlap_thresh, prior_for_matching,
+    def __init__(self, cfg,num_classes, size, overlap_thresh, prior_for_matching,
                  bkg_label, neg_mining, neg_pos, neg_overlap, encode_target,
                  use_gpu=True):
         super(MultiBoxLoss, self).__init__()
@@ -41,7 +40,7 @@ class MultiBoxLoss(nn.Module):
         self.do_neg_mining = neg_mining
         self.negpos_ratio = neg_pos
         self.neg_overlap = neg_overlap
-        cfg = get_config(str(size))
+
         self.variance = cfg['variance']
 
     def forward(self, predictions, targets):
@@ -79,7 +78,7 @@ class MultiBoxLoss(nn.Module):
         conf_t = Variable(conf_t, requires_grad=False)
 
         pos = conf_t > 0
-        num_pos = pos.sum(keepdim=True)
+     #   num_pos = pos.sum(keepdim=True)
         # print("num_pos",num_pos)
         # Localization Loss (Smooth L1)
         # Shape: [batch,num_priors,4]
@@ -99,6 +98,8 @@ class MultiBoxLoss(nn.Module):
         _, loss_idx = loss_c.sort(1, descending=True)
         _, idx_rank = loss_idx.sort(1)
         num_pos = pos.long().sum(1, keepdim=True)
+        # print(num_pos.long().sum()/16)
+        # print(num_pos)
         num_neg = torch.clamp(self.negpos_ratio*num_pos, max=pos.size(1)-1)
         neg = idx_rank < num_neg.expand_as(idx_rank)
 

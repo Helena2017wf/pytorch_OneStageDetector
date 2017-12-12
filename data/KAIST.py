@@ -74,8 +74,9 @@ class AnnotationTransform(object):
                 if line[0] == "%":
                     continue
                 else:
-                    difficult = self._difficult_condition(line)
-                    if not difficult or self.keep_difficult:
+                    # difficult = self._difficult_condition(line)
+                    # if not difficult or self.keep_difficult:
+                    if line[0] == 'person':
                         box = [int(i) for i in line[1:5]]
                         ##bbox format "xywh"
                         ## convert to "xmin,ymin, xmax, ymax"
@@ -108,7 +109,7 @@ class GetDataset(data.Dataset):
     """
 
     def __init__(self, root, transform=None, target_transform=None,
-                 type='visible',dataset_name='train02_wo_difficult',skip=0):
+                 type='visible',dataset_name='train02_only_person',skip=0):
         self.root = root
         self.type = type
         self.name = dataset_name

@@ -1,19 +1,22 @@
-import os
-import torch
-import torch.nn as nn
-import torch.optim as optim
-import torch.backends.cudnn as cudnn
-import torch.nn.init as init
 import argparse
-import evaluation
-from torch.autograd import Variable
-import torch.utils.data as data
-from data import get_config, DatasetRoot,GetDataset,AnnotationTransform,CLASSES,detection_collate,DATASET_NAME
-from utils.augmentations import SSDAugmentation
-from layers.modules import MultiBoxLoss
-from ssd import build_ssd
-import numpy as np
+import os
 import time
+
+import numpy as np
+import torch
+import torch.backends.cudnn as cudnn
+import torch.nn as nn
+import torch.nn.init as init
+import torch.optim as optim
+import torch.utils.data as data
+from torch.autograd import Variable
+
+import evaluation
+from Nets import get_net,get_config
+from data import DatasetRoot,GetDataset,AnnotationTransform,CLASSES,detection_collate,DATASET_NAME
+from layers.modules import MultiBoxLoss
+from utils.augmentations import SSDAugmentation
+
 
 def print_network(model, name):
     num_params = 0
@@ -27,7 +30,8 @@ def str2bool(v):
     return v.lower() in ("yes", "true", "t", "1")
 
 parser = argparse.ArgumentParser(description='Single Shot MultiBox Detector Training')
-parser.add_argument('--version', default='512', help='conv11_2(v2) or pool6(v1) as last layer')
+parser.add_argument('--net', default='PDN', help='detection network')
+parser.add_argument('--input_dim', default='512', help='the dimension of the input image')
 parser.add_argument('--img_type', default='visible', help='format of image (visible, lwir,...)')
 parser.add_argument('--log_dir', default='./log', help='the path for saving log infomation')
 parser.add_argument('--basenet', default='vgg16_reducedfc.pth', help='pretrained base model')
@@ -36,6 +40,7 @@ parser.add_argument('--batch_size', default=8, type=int, help='Batch size for tr
 parser.add_argument('--resume', default=None, type=str, help='Resume from checkpoint')
 parser.add_argument('--num_workers', default=2, type=int, help='Number of workers used in dataloading')
 parser.add_argument('--iterations', default=120000, type=int, help='Number of training iterations')
+parser.add_argument('--step_values', default=(80000,100000), type=list, help='the steps for decay learning rate')
 parser.add_argument('--start_iter', default=0, type=int, help='Begin counting iterations starting from this value (should be used with resume)')
 parser.add_argument('--cuda', default=True, type=str2bool, help='Use cuda to train model')
 parser.add_argument('--lr', '--learning-rate', default=1e-4, type=float, help='initial learning rate')
@@ -54,48 +59,51 @@ if args.cuda and torch.cuda.is_available():
 else:
     torch.set_default_tensor_type('torch.FloatTensor')
 
-cfg = get_config(args.version)
+cfg = get_config(args.net+args.input_dim)
 
 if not os.path.exists(args.save_folder):
     os.mkdir(args.save_folder)
 
 if not os.path.exists(args.log_dir):
     os.mkdir(args.log_dir)
-# train_sets = [('2007', 'trainval'), ('2012', 'trainval')]
-# train_sets = 'train'
-ssd_dim = int(args.version)  # only support 300 now
+
+image_size = int(args.input_dim)  # only support 300 now
 means = (104, 117, 123)  # only support voc now
 num_classes = len(CLASSES) + 1
 batch_size = args.batch_size
-accum_batch_size = 16
-iter_size = accum_batch_size / batch_size
-max_iter = 120000
-weight_decay = 0.0005
-stepvalues = (80000, 100000, 120000)
-gamma = 0.1
-momentum = 0.9
+
+######## For future multi-GPU training #########
+# accum_batch_size = 32
+# iter_size = accum_batch_size / batch_size
+
+# max_iter = 120000
+# weight_decay = 0.0005
+# stepvalues = (80000, 100000, 120000)
+# gamma = 0.1
+# momentum = 0.9
 
 if args.visdom:
     import visdom
     viz = visdom.Visdom()
 
-ssd_net = build_ssd('train', ssd_dim, num_classes)
-net = ssd_net
-print_network(net,args.version)
+net_class = get_net(args.net)
+net = net_class('train', image_size, num_classes,cfg)
+parallel_net = net
+print_network(net,args.net+args.input_dim)
 if args.cuda:
-    net = torch.nn.DataParallel(ssd_net)
+    parallel_net = torch.nn.DataParallel(net)
     cudnn.benchmark = True
 
 if args.resume:
     print('Resuming training, loading {}...'.format(args.resume))
-    ssd_net.load_weights(args.resume)
+    net.load_weights(args.resume)
 else:
     vgg_weights = torch.load(args.save_folder + args.basenet)
     print('Loading base network...')
-    ssd_net.vgg.load_state_dict(vgg_weights)
+    net._vgg.load_state_dict(vgg_weights)
 
 if args.cuda:
-    net = net.cuda()
+    parallel_net = parallel_net.cuda()
 
 
 def xavier(param):
@@ -111,25 +119,26 @@ def weights_init(m):
 if not args.resume:
     print('Initializing weights...')
     # initialize newly added layers' weights with xavier method
-    ssd_net.extras.apply(weights_init)
-    ssd_net.loc.apply(weights_init)
-    ssd_net.conf.apply(weights_init)
+    if net._extras:
+        net._extras.apply(weights_init)
+    net._loc.apply(weights_init)
+    net._conf.apply(weights_init)
 
-optimizer = optim.SGD(net.parameters(), lr=args.lr,
+optimizer = optim.SGD(parallel_net.parameters(), lr=args.lr,
                       momentum=args.momentum, weight_decay=args.weight_decay)
-criterion = MultiBoxLoss(num_classes, ssd_dim, 0.5, True, 0, True, 3, 0.5, False, args.cuda)
+criterion = MultiBoxLoss(cfg, num_classes, image_size, 0.35, True, 0, True, 3, 0.5, False, args.cuda)
 
 
 
 def train():
-    net.train()
+    parallel_net.train()
     # loss counters
     loc_loss = 0  # epoch
     conf_loss = 0
     epoch = 0
     print('Loading Dataset...')
     dataset = GetDataset(args.voc_root, SSDAugmentation(
-        ssd_dim, means,type=args.img_type), AnnotationTransform(),type=args.img_type)
+        image_size, means,type=args.img_type), AnnotationTransform(),type=args.img_type)
 
     epoch_size = len(dataset) // args.batch_size
     print('Training SSD on', dataset.name)
@@ -159,11 +168,11 @@ def train():
     batch_iterator = None
     data_loader = data.DataLoader(dataset, batch_size, num_workers=args.num_workers,
                                   shuffle=True, collate_fn=detection_collate, pin_memory=True)
-    for iteration in range(args.start_iter, max_iter):
+    for iteration in range(args.start_iter, args.iterations):
         if (not batch_iterator) or (iteration % epoch_size == 0):
             # create batch iterator
             batch_iterator = iter(data_loader)
-        if iteration in stepvalues:
+        if iteration in args.step_values:
             step_index += 1
             adjust_learning_rate(optimizer, args.gamma, step_index)
             if args.visdom:
@@ -225,13 +234,13 @@ def train():
                 )
         if (iteration+1) % 5000 == 0:
             print('Saving state, iter:', iteration)
-            save_path = 'weights/ssd_' + args.version +'_'+ DATASET_NAME + "_" + args.img_type + "_" + repr(iteration) + '.pth'
-            torch.save(ssd_net.state_dict(), save_path )
+            save_path = 'weights/' + args.net+args.input_dim +'_'+ DATASET_NAME + "_" + args.img_type + "_" + repr(iteration) + '.pth'
+            torch.save(net.state_dict(), save_path )
 
             if (iteration + 1) % 20000 == 0:
             ####evaluation##########
                 print("runing evaluation!!!!")
-                map, mam = evaluation.run_evaluation(size=ssd_dim,model_name=save_path)
+                map, mam = evaluation.run_evaluation(size=image_size,model_name=save_path)
 
                 with open(os.path.join(args.log_dir,'validation.txt'),'a') as f:
                     f.write(save_path + '\n')
@@ -239,7 +248,7 @@ def train():
                     f.write("Mean Miss Rate:" + str(mam) + "\n")
 
 
-    torch.save(ssd_net.state_dict(), args.save_folder + 'ssd_' + args.version + '_'+ DATASET_NAME + "_" + args.img_type + '.pth')
+    torch.save(net.state_dict(), args.save_folder + args.net+args.input_dim +'_'+ DATASET_NAME + "_" + args.img_type + '.pth')
 
 
 def adjust_learning_rate(optimizer, gamma, step):

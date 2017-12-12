@@ -5,26 +5,22 @@
 """
 
 from __future__ import print_function
-import torch
-import torch.nn as nn
-import torch.backends.cudnn as cudnn
-import torchvision.transforms as transforms
-from torch.autograd import Variable
-from data import DatasetRoot
-from data import CLASSES as labelmap
-import torch.utils.data as data
 
-from data import AnnotationTransform, GetDataset, BaseTransform, CLASSES,DATASET_NAME
-from ssd import build_ssd
-
-import matplotlib.pyplot as plt
-import sys
-import os
-import time
 import argparse
-import numpy as np
+import os
 import pickle
-import cv2
+import sys
+import time
+
+import numpy as np
+import torch
+import torch.backends.cudnn as cudnn
+from torch.autograd import Variable
+
+from Nets import get_net,get_config
+from data import AnnotationTransform, GetDataset, BaseTransform, CLASSES,DATASET_NAME
+from data import CLASSES as labelmap
+from data import DatasetRoot
 
 if sys.version_info[0] == 2:
     import xml.etree.cElementTree as ET
@@ -35,7 +31,9 @@ def str2bool(v):
     return v.lower() in ("yes", "true", "t", "1")
 
 parser = argparse.ArgumentParser(description='Single Shot MultiBox Detection')
-parser.add_argument('--trained_model', default='weights/VOC300.pth',
+parser.add_argument('--net', default='SSD', help='detection network')
+parser.add_argument('--input_dim', default='512', help='the dimension of the input image')
+parser.add_argument('--trained_model', default='weights/ssd_512_Sensiac_v_ir_m.pth',
                     type=str, help='Trained state_dict file path to open')
 parser.add_argument('--save_folder', default='eval/', type=str,
                     help='File path to save results')
@@ -59,7 +57,6 @@ else:
 
 dataset_mean = (104, 117, 123)
 
-input_dim = 300
 # annopath = os.path.join(args.voc_root, 'VOC2007', 'Annotations', '%s.xml')
 # imgpath = os.path.join(args.voc_root, 'VOC2007', 'JPEGImages', '%s.jpg')
 # imgsetpath = os.path.join(args.voc_root, 'VOC2007', 'ImageSets', 'Main', '{:s}.txt')
@@ -159,7 +156,8 @@ def write_results_file(all_boxes, dataset):
                                    dets[k, 2] + 1, dets[k, 3] + 1))
 
     ###for matlab pdollar evaluation
-
+    if not os.path.exists("eval/matlab"):
+        os.makedirs("eval/matlab")
     for cls_ind, cls in enumerate(labelmap):
         print('Writing {:s} results file'.format(cls))
         filename = "eval/matlab/Dets.txt"
@@ -627,7 +625,7 @@ def test_net(save_folder, net, cuda, dataset, transform, top_k,
     # timers
 
     _t = {'im_detect': Timer(), 'misc': Timer()}
-    output_dir = get_output_dir('ssd512_120000', DATASET_NAME)
+    output_dir = get_output_dir(DATASET_NAME+"_"+args.net+args.input_dim+"_120000", DATASET_NAME)
     det_file = os.path.join(output_dir, 'detections.pkl')
 
     index = 0
@@ -635,7 +633,7 @@ def test_net(save_folder, net, cuda, dataset, transform, top_k,
         im, gt, h, w = dataset.pull_item(i)
         # if not len(gt): ### some image dont have gt
         #     continue
-        # print("%s/%s"%(index,num_images))
+        print("%s/%s"%(index,num_images))
         index = index+1
         x = Variable(im.unsqueeze(0))
         if args.cuda:
@@ -683,17 +681,21 @@ def run_evaluation(size = None, model_name = None):
     if not model_name:
         model_name = args.trained_model
     if not size:
-        size = input_dim
+        size = int(args.input_dim)
     num_classes = len(CLASSES) + 1 # +1 background
-    net = build_ssd('test', size, num_classes) # initialize SSD
+    cfg = get_config(args.net+args.input_dim)
+    net_class = get_net(args)
+    net = net_class('test', size, num_classes,cfg) # initialize SSD
     net.load_state_dict(torch.load(model_name))
     net.eval()
     print('Finished loading model!')
     # load data
     if DATASET_NAME == 'KAIST':
         dataset = GetDataset(args.voc_root, BaseTransform(size, dataset_mean), AnnotationTransform(),dataset_name='test20',skip=0)
-    else:
+    elif DATASET_NAME == 'VOC0712':
         dataset = GetDataset(args.voc_root, BaseTransform(size, dataset_mean), AnnotationTransform(),[('2007','test')])
+    elif DATASET_NAME == 'Sensiac':
+        dataset = GetDataset(args.voc_root, BaseTransform(size, dataset_mean), AnnotationTransform(),dataset_name='day_test10')
     if args.cuda:
         net = net.cuda()
         cudnn.benchmark = True
@@ -705,7 +707,7 @@ def run_evaluation(size = None, model_name = None):
 
 if __name__ == '__main__':
 
-    map, mam = run_evaluation(size=300,model_name="weights/VOC300.pth")
+    map, mam = run_evaluation()
 
     print("map:",map,"mam",mam)
     # dataset = GetDataset(args.voc_root, BaseTransform(300, dataset_mean), AnnotationTransform(), dataset_name='test20',skip=0)
