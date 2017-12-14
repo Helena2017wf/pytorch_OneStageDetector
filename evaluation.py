@@ -696,6 +696,8 @@ def run_evaluation(size = None, model_name = None):
         dataset = GetDataset(args.voc_root, BaseTransform(size, dataset_mean), AnnotationTransform(),[('2007','test')])
     elif DATASET_NAME == 'Sensiac':
         dataset = GetDataset(args.voc_root, BaseTransform(size, dataset_mean), AnnotationTransform(),dataset_name='day_test10')
+    elif DATASET_NAME == 'Caltech':
+        dataset = GetDataset(args.voc_root, BaseTransform(size, dataset_mean), AnnotationTransform(), dataset_name='test01', skip=30)
     if args.cuda:
         net = net.cuda()
         cudnn.benchmark = True
