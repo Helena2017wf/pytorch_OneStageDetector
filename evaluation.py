@@ -676,34 +676,31 @@ def evaluate_detections(box_list, output_dir, dataset):
 
     return map,mam
 
-def run_evaluation(size = None, model_name = None):
+def run_evaluation(input_dim,net_name, saved_model_name):
 
-    if not model_name:
-        model_name = args.trained_model
-    if not size:
-        size = int(args.input_dim)
+
     num_classes = len(CLASSES) + 1 # +1 background
-    cfg = get_config(args.net+args.input_dim)
-    net_class = get_net(args)
-    net = net_class('test', size, num_classes,cfg) # initialize SSD
-    net.load_state_dict(torch.load(model_name))
+    cfg = get_config(net_name+str(input_dim))
+    net_class = get_net(net_name)
+    net = net_class(input_dim,'test', num_classes,cfg) # initialize SSD
+    net.load_state_dict(torch.load(saved_model_name))
     net.eval()
     print('Finished loading model!')
     # load data
     if DATASET_NAME == 'KAIST':
-        dataset = GetDataset(args.voc_root, BaseTransform(size, dataset_mean), AnnotationTransform(),dataset_name='test20',skip=0)
+        dataset = GetDataset(args.voc_root, BaseTransform(input_dim, dataset_mean), AnnotationTransform(),dataset_name='test20',skip=0)
     elif DATASET_NAME == 'VOC0712':
-        dataset = GetDataset(args.voc_root, BaseTransform(size, dataset_mean), AnnotationTransform(),[('2007','test')])
+        dataset = GetDataset(args.voc_root, BaseTransform(input_dim, dataset_mean), AnnotationTransform(),[('2007','test')])
     elif DATASET_NAME == 'Sensiac':
-        dataset = GetDataset(args.voc_root, BaseTransform(size, dataset_mean), AnnotationTransform(),dataset_name='day_test10')
+        dataset = GetDataset(args.voc_root, BaseTransform(input_dim, dataset_mean), AnnotationTransform(),dataset_name='day_test10')
     elif DATASET_NAME == 'Caltech':
-        dataset = GetDataset(args.voc_root, BaseTransform(size, dataset_mean), AnnotationTransform(), dataset_name='test01', skip=30)
+        dataset = GetDataset(args.voc_root, BaseTransform(input_dim, dataset_mean), AnnotationTransform(), dataset_name='test01', skip=300)
     if args.cuda:
         net = net.cuda()
         cudnn.benchmark = True
     # evaluation
     map, mam = test_net(args.save_folder, net, args.cuda, dataset,
-             BaseTransform(net.size, dataset_mean), args.top_k, size,
+             BaseTransform(net.size, dataset_mean), args.top_k, input_dim,
              thresh=args.confidence_threshold)
     return map, mam
 

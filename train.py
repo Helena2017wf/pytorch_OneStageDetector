@@ -12,6 +12,7 @@ import torch.utils.data as data
 from torch.autograd import Variable
 
 import evaluation
+from logger import Logger
 from Nets import get_net,get_config
 from data import DatasetRoot,GetDataset,AnnotationTransform,CLASSES,detection_collate,DATASET_NAME
 from layers.modules import MultiBoxLoss
@@ -34,11 +35,15 @@ parser.add_argument('--net', default='PDN', help='detection network')
 parser.add_argument('--input_dim', default='512', help='the dimension of the input image')
 parser.add_argument('--img_type', default='visible', help='format of image (visible, lwir,...)')
 parser.add_argument('--log_dir', default='./log', help='the path for saving log infomation')
+parser.add_argument('--log_step', default=10, type=int, help='the step for printing log infomation')
+parser.add_argument('--save_images_step', default=500, type=int, help='the step for saving images')
+parser.add_argument('--model_save_step', default=20, type=int, help='the step for saving model')
+
 parser.add_argument('--basenet', default='vgg16_reducedfc.pth', help='pretrained base model')
 parser.add_argument('--jaccard_threshold', default=0.5, type=float, help='Min Jaccard index for matching')
 parser.add_argument('--batch_size', default=8, type=int, help='Batch size for training')
-parser.add_argument('--resume', default=None, type=str, help='Resume from checkpoint')
-parser.add_argument('--num_workers', default=2, type=int, help='Number of workers used in dataloading')
+parser.add_argument('--resume', default="weights/PDN512_Caltech_visible_199.pth", type=str, help='Resume from checkpoint')
+parser.add_argument('--num_workers', default=4, type=int, help='Number of workers used in dataloading')
 parser.add_argument('--iterations', default=120000, type=int, help='Number of training iterations')
 parser.add_argument('--step_values', default=(80000,100000), type=list, help='the steps for decay learning rate')
 parser.add_argument('--start_iter', default=0, type=int, help='Begin counting iterations starting from this value (should be used with resume)')
@@ -48,8 +53,12 @@ parser.add_argument('--momentum', default=0.9, type=float, help='momentum')
 parser.add_argument('--weight_decay', default=5e-4, type=float, help='Weight decay for SGD')
 parser.add_argument('--gamma', default=0.1, type=float, help='Gamma update for SGD')
 parser.add_argument('--log_iters', default=True, type=bool, help='Print the loss at each iteration')
-parser.add_argument('--visdom', default=True, type=str2bool, help='Use visdom to for loss visualization')
-parser.add_argument('--send_images_to_visdom', type=str2bool, default=True, help='Sample a random image from each 10th batch, send it to visdom after augmentations step')
+
+parser.add_argument('--send_images_to_tensorboard', type=str2bool, default=True, help='Sample a random image from each log batch,'
+                                                                                      ' send it to tensorboard after augmentations step')
+parser.add_argument('--validation', type=str2bool, default=True, help='validate the trained model')
+# parser.add_argument('--visdom', default=True, type=str2bool, help='Use visdom to for loss visualization')
+# parser.add_argument('--send_images_to_visdom', type=str2bool, default=True, help='Sample a random image from each 10th batch, send it to visdom after augmentations step')
 parser.add_argument('--save_folder', default='weights/', help='Location to save checkpoint models')
 parser.add_argument('--voc_root', default=DatasetRoot, help='Location of VOC root directory')
 args = parser.parse_args()
@@ -67,6 +76,8 @@ if not os.path.exists(args.save_folder):
 if not os.path.exists(args.log_dir):
     os.mkdir(args.log_dir)
 
+logger = Logger(args.log_dir)
+
 image_size = int(args.input_dim)  # only support 300 now
 means = (104, 117, 123)  # only support voc now
 num_classes = len(CLASSES) + 1
@@ -82,9 +93,9 @@ batch_size = args.batch_size
 # gamma = 0.1
 # momentum = 0.9
 
-if args.visdom:
-    import visdom
-    viz = visdom.Visdom()
+# if args.visdom:
+#     import visdom
+#     viz = visdom.Visdom()
 
 net_class = get_net(args.net)
 net = net_class('train', image_size, num_classes,cfg)
@@ -143,28 +154,28 @@ def train():
     epoch_size = len(dataset) // args.batch_size
     print('Training SSD on', dataset.name)
     step_index = 0
-    if args.visdom:
-        # initialize visdom loss plot
-        lot = viz.line(
-            X=torch.zeros((1,)).cpu(),
-            Y=torch.zeros((1, 3)).cpu(),
-            opts=dict(
-                xlabel='Iteration',
-                ylabel='Loss',
-                title='Current SSD Training Loss',
-                legend=['Loc Loss', 'Conf Loss', 'Loss']
-            )
-        )
-        epoch_lot = viz.line(
-            X=torch.zeros((1,)).cpu(),
-            Y=torch.zeros((1, 3)).cpu(),
-            opts=dict(
-                xlabel='Epoch',
-                ylabel='Loss',
-                title='Epoch SSD Training Loss',
-                legend=['Loc Loss', 'Conf Loss', 'Loss']
-            )
-        )
+    # if args.visdom:
+    #     # initialize visdom loss plot
+    #     lot = viz.line(
+    #         X=torch.zeros((1,)).cpu(),
+    #         Y=torch.zeros((1, 3)).cpu(),
+    #         opts=dict(
+    #             xlabel='Iteration',
+    #             ylabel='Loss',
+    #             title='Current SSD Training Loss',
+    #             legend=['Loc Loss', 'Conf Loss', 'Loss']
+    #         )
+    #     )
+    #     epoch_lot = viz.line(
+    #         X=torch.zeros((1,)).cpu(),
+    #         Y=torch.zeros((1, 3)).cpu(),
+    #         opts=dict(
+    #             xlabel='Epoch',
+    #             ylabel='Loss',
+    #             title='Epoch SSD Training Loss',
+    #             legend=['Loc Loss', 'Conf Loss', 'Loss']
+    #         )
+    #     )
     batch_iterator = None
     data_loader = data.DataLoader(dataset, batch_size, num_workers=args.num_workers,
                                   shuffle=True, collate_fn=detection_collate, pin_memory=True)
@@ -175,14 +186,14 @@ def train():
         if iteration in args.step_values:
             step_index += 1
             adjust_learning_rate(optimizer, args.gamma, step_index)
-            if args.visdom:
-                viz.line(
-                    X=torch.ones((1, 3)).cpu() * epoch,
-                    Y=torch.Tensor([loc_loss, conf_loss,
-                        loc_loss + conf_loss]).unsqueeze(0).cpu() / epoch_size,
-                    win=epoch_lot,
-                    update='append'
-                )
+            # if args.visdom:
+            #     viz.line(
+            #         X=torch.ones((1, 3)).cpu() * epoch,
+            #         Y=torch.Tensor([loc_loss, conf_loss,
+            #             loc_loss + conf_loss]).unsqueeze(0).cpu() / epoch_size,
+            #         win=epoch_lot,
+            #         update='append'
+            #     )
             # reset epoch loss counters
             loc_loss = 0
             conf_loss = 0
@@ -209,43 +220,51 @@ def train():
         t1 = time.time()
         loc_loss += loss_l.data[0]
         conf_loss += loss_c.data[0]
-        if iteration % 10 == 0:
+        if iteration % args.log_step == 0:
             print('Timer: %.4f sec.' % (t1 - t0))
             print('iter ' + repr(iteration) + ' || Loss: %.4f ||' % (loss.data[0]), end=' ')
-            if args.visdom and args.send_images_to_visdom:
-                random_batch_index = np.random.randint(images.size(0))
-                viz.image(images.data[random_batch_index].cpu().numpy())
-        if args.visdom:
-            viz.line(
-                X=torch.ones((1, 3)).cpu() * iteration,
-                Y=torch.Tensor([loss_l.data[0], loss_c.data[0],
-                    loss_l.data[0] + loss_c.data[0]]).unsqueeze(0).cpu(),
-                win=lot,
-                update='append'
-            )
-            # hacky fencepost solution for 0th epoch plot
-            if iteration == 0:
-                viz.line(
-                    X=torch.zeros((1, 3)).cpu(),
-                    Y=torch.Tensor([loc_loss, conf_loss,
-                        loc_loss + conf_loss]).unsqueeze(0).cpu(),
-                    win=epoch_lot,
-                    update=True
-                )
-        if (iteration+1) % 5000 == 0:
+            logger.scalar_summary("bbox_regression_loss",loss_l.data[0],iteration)
+            logger.scalar_summary("classification_loss",loss_c.data[0],iteration)
+            logger.scalar_summary("total_loss",loss.data[0],iteration)
+
+            if args.send_images_to_tensorboard and iteration % args.save_images_step == 0:
+                logger.image_summary("agumentation images",images.data.cpu().numpy(),iteration)
+            # if args.visdom and args.send_images_to_visdom:
+            #     random_batch_index = np.random.randint(images.size(0))
+            #     viz.image(images.data[random_batch_index].cpu().numpy())
+        # if args.visdom:
+        #     viz.line(
+        #         X=torch.ones((1, 3)).cpu() * iteration,
+        #         Y=torch.Tensor([loss_l.data[0], loss_c.data[0],
+        #             loss_l.data[0] + loss_c.data[0]]).unsqueeze(0).cpu(),
+        #         win=lot,
+        #         update='append'
+        #     )
+        #     # hacky fencepost solution for 0th epoch plot
+        #     if iteration == 0:
+        #         viz.line(
+        #             X=torch.zeros((1, 3)).cpu(),
+        #             Y=torch.Tensor([loc_loss, conf_loss,
+        #                 loc_loss + conf_loss]).unsqueeze(0).cpu(),
+        #             win=epoch_lot,
+        #             update=True
+        #         )
+        if (iteration+1) % args.model_save_step == 0:
             print('Saving state, iter:', iteration)
             save_path = 'weights/' + args.net+args.input_dim +'_'+ DATASET_NAME + "_" + args.img_type + "_" + repr(iteration) + '.pth'
             torch.save(net.state_dict(), save_path )
 
-            if (iteration + 1) % 20000 == 0:
+            if args.validation:
             ####evaluation##########
                 print("runing evaluation!!!!")
-                map, mam = evaluation.run_evaluation(size=image_size,model_name=save_path)
-
-                with open(os.path.join(args.log_dir,'validation.txt'),'a') as f:
-                    f.write(save_path + '\n')
-                    f.write("Mean AP:"+str(map)+"\n")
-                    f.write("Mean Miss Rate:" + str(mam) + "\n")
+                map, mam = evaluation.run_evaluation(input_dim=image_size,net_name= args.net, saved_model_name=save_path)
+                logger.scalar_summary("mAP",map,iteration)
+                logger.scalar_summary("Average_Missing_Rate",mam,iteration)
+                #
+                # with open(os.path.join(args.log_dir,'validation.txt'),'a') as f:
+                #     f.write(save_path + '\n')
+                #     f.write("Mean AP:"+str(map)+"\n")
+                #     f.write("Mean Miss Rate:" + str(mam) + "\n")
 
 
     torch.save(net.state_dict(), args.save_folder + args.net+args.input_dim +'_'+ DATASET_NAME + "_" + args.img_type + '.pth')

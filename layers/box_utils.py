@@ -158,6 +158,7 @@ def decode(loc, priors, variances):
 
 def log_sum_exp(x):
     """Utility function for computing log_sum_exp while determining
+
     This will be used to determine unaveraged confidence loss across
     all examples in a batch.
     Args:
