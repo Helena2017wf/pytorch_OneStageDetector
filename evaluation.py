@@ -676,7 +676,7 @@ def evaluate_detections(box_list, output_dir, dataset):
 
     return map,mam
 
-def run_evaluation(input_dim,net_name, saved_model_name):
+def run_evaluation(input_dim,net_name, saved_model_name,skip=0):
 
 
     num_classes = len(CLASSES) + 1 # +1 background
@@ -688,13 +688,13 @@ def run_evaluation(input_dim,net_name, saved_model_name):
     print('Finished loading model!')
     # load data
     if DATASET_NAME == 'KAIST':
-        dataset = GetDataset(args.voc_root, BaseTransform(input_dim, dataset_mean), AnnotationTransform(),dataset_name='test20',skip=0)
+        dataset = GetDataset(args.voc_root, BaseTransform(input_dim, dataset_mean), AnnotationTransform(),dataset_name='test20',skip=skip)
     elif DATASET_NAME == 'VOC0712':
         dataset = GetDataset(args.voc_root, BaseTransform(input_dim, dataset_mean), AnnotationTransform(),[('2007','test')])
     elif DATASET_NAME == 'Sensiac':
         dataset = GetDataset(args.voc_root, BaseTransform(input_dim, dataset_mean), AnnotationTransform(),dataset_name='day_test10')
     elif DATASET_NAME == 'Caltech':
-        dataset = GetDataset(args.voc_root, BaseTransform(input_dim, dataset_mean), AnnotationTransform(), dataset_name='test01', skip=300)
+        dataset = GetDataset(args.voc_root, BaseTransform(input_dim, dataset_mean), AnnotationTransform(), dataset_name='test01', skip=skip)
     if args.cuda:
         net = net.cuda()
         cudnn.benchmark = True
