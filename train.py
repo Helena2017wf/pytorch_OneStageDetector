@@ -31,8 +31,8 @@ def str2bool(v):
     return v.lower() in ("yes", "true", "t", "1")
 
 parser = argparse.ArgumentParser(description='Single Shot MultiBox Detector Training')
-parser.add_argument('--net', default='PDN', help='detection network')
-parser.add_argument('--input_dim', default='512', help='the dimension of the input image')
+parser.add_argument('--net', default='SSD', help='detection network')
+parser.add_argument('--input_dim', default='300', help='the dimension of the input image')
 parser.add_argument('--img_type', default='visible', help='format of image (visible, lwir,...)')
 parser.add_argument('--log_dir', default='./log', help='the path for saving log infomation')
 parser.add_argument('--log_step', default=10, type=int, help='the step for printing log infomation')
@@ -48,7 +48,7 @@ parser.add_argument('--iterations', default=120000, type=int, help='Number of tr
 parser.add_argument('--step_values', default=(80000,100000), type=list, help='the steps for decay learning rate')
 parser.add_argument('--start_iter', default=0, type=int, help='Begin counting iterations starting from this value (should be used with resume)')
 parser.add_argument('--cuda', default=True, type=str2bool, help='Use cuda to train model')
-parser.add_argument('--lr', '--learning-rate', default=1e-3, type=float, help='initial learning rate')
+parser.add_argument('--lr', '--learning-rate', default=1e-4, type=float, help='initial learning rate')
 parser.add_argument('--momentum', default=0.9, type=float, help='momentum')
 parser.add_argument('--weight_decay', default=5e-4, type=float, help='Weight decay for SGD')
 parser.add_argument('--gamma', default=0.1, type=float, help='Gamma update for SGD')
@@ -146,7 +146,7 @@ def train():
     # loss counters
     # loc_loss = 0  # epoch
     # conf_loss = 0
-    # epoch = 0
+    # epoch = 0:
     print('Loading Dataset...')
     dataset = GetDataset(args.voc_root, SSDAugmentation(
         image_size, means,type=args.img_type), AnnotationTransform(),type=args.img_type)
@@ -179,7 +179,7 @@ def train():
             targets = [Variable(anno, volatile=True) for anno in targets]
         # forward
         t0 = time.time()
-        out = net(images)
+        out = parallel_net(images)
         # backprop
         optimizer.zero_grad()
         loss_l, loss_c = criterion(out, targets)

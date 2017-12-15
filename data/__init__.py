@@ -2,7 +2,7 @@
 import cv2
 import numpy as np
 
-from .Caltech import DatasetRoot,GetDataset,AnnotationTransform,CLASSES,detection_collate, DATASET_NAME
+from .voc0712 import DatasetRoot,GetDataset,AnnotationTransform,CLASSES,detection_collate, DATASET_NAME
 
 
 def base_transform(image, size, mean):
