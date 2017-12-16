@@ -318,7 +318,9 @@ class Expand(object):
             return image, boxes, labels
 
         height, width, depth = image.shape
-        ratio = random.uniform(1, 4)
+
+        ##TODO need to be modified or the object is soooooooo small, origin is 4, now change to 1.5
+        ratio = random.uniform(1, 1.5)
         left = random.uniform(0, width*ratio - width)
         top = random.uniform(0, height*ratio - height)
 
@@ -396,9 +398,20 @@ class PhotometricDistort(object):
         im, boxes, labels = distort(im, boxes, labels)
         return self.rand_light_noise(im, boxes, labels)
 
+class DensityDistort(object):
+
+    def __init__(self):
+        self.rand_contrast = RandomContrast()
+        self.rand_brightness = RandomBrightness()
+
+    def __call__(self, image, boxes, labels):
+        im = image.copy()
+        im, boxes, labels = self.rand_brightness(im, boxes, labels)
+        return self.rand_contrast(im, boxes, labels)
+
 
 class SSDAugmentation(object):
-    def __init__(self, size=300, mean=(104, 117, 123),type='visible'):
+    def __init__(self, size, mean=(104, 117, 123),type='visible'):
         self.mean = mean
         self.size = size
         if type=='visible':
@@ -418,6 +431,7 @@ class SSDAugmentation(object):
                 ConvertFromInts(),
                 ToAbsoluteCoords(),
                 # PhotometricDistort(),
+                DensityDistort(),  #### For NON-RGB images
                 Expand(self.mean),
                 RandomSampleCrop(),
                 RandomMirror(),

@@ -2,6 +2,7 @@ import argparse
 import os
 import time
 
+# os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
 import numpy as np
 import torch
 import torch.backends.cudnn as cudnn
@@ -31,8 +32,8 @@ def str2bool(v):
     return v.lower() in ("yes", "true", "t", "1")
 
 parser = argparse.ArgumentParser(description='Single Shot MultiBox Detector Training')
-parser.add_argument('--net', default='SSD', help='detection network')
-parser.add_argument('--input_dim', default='300', help='the dimension of the input image')
+parser.add_argument('--net', default='PDN', help='detection network')
+parser.add_argument('--input_dim', default='512', help='the dimension of the input image')
 parser.add_argument('--img_type', default='visible', help='format of image (visible, lwir,...)')
 parser.add_argument('--log_dir', default='./log', help='the path for saving log infomation')
 parser.add_argument('--log_step', default=10, type=int, help='the step for printing log infomation')
@@ -42,13 +43,13 @@ parser.add_argument('--model_save_step', default=2000, type=int, help='the step 
 parser.add_argument('--basenet', default='vgg16_reducedfc.pth', help='pretrained base model')
 parser.add_argument('--jaccard_threshold', default=0.5, type=float, help='Min Jaccard index for matching')
 parser.add_argument('--batch_size', default=8, type=int, help='Batch size for training')
-parser.add_argument('--resume', default=None, type=str, help='Resume from checkpoint')
+parser.add_argument('--resume', default="weights/PDN512_Caltech_visible_5999.pth", type=str, help='Resume from checkpoint')
 parser.add_argument('--num_workers', default=4, type=int, help='Number of workers used in dataloading')
 parser.add_argument('--iterations', default=120000, type=int, help='Number of training iterations')
 parser.add_argument('--step_values', default=(80000,100000), type=list, help='the steps for decay learning rate')
-parser.add_argument('--start_iter', default=0, type=int, help='Begin counting iterations starting from this value (should be used with resume)')
+parser.add_argument('--start_iter', default=6000, type=int, help='Begin counting iterations starting from this value (should be used with resume)')
 parser.add_argument('--cuda', default=True, type=str2bool, help='Use cuda to train model')
-parser.add_argument('--lr', '--learning-rate', default=1e-4, type=float, help='initial learning rate')
+parser.add_argument('--lr', '--learning-rate', default=1e-3, type=float, help='initial learning rate')
 parser.add_argument('--momentum', default=0.9, type=float, help='momentum')
 parser.add_argument('--weight_decay', default=5e-4, type=float, help='Weight decay for SGD')
 parser.add_argument('--gamma', default=0.1, type=float, help='Gamma update for SGD')
@@ -73,10 +74,11 @@ cfg = get_config(args.net+args.input_dim)
 if not os.path.exists(args.save_folder):
     os.mkdir(args.save_folder)
 
-if not os.path.exists(args.log_dir):
-    os.mkdir(args.log_dir)
+log_dir = os.path.join(args.log_dir,args.net+args.input_dim+"_"+DATASET_NAME)
+if not os.path.exists(log_dir):
+    os.mkdir(log_dir)
 
-logger = Logger(args.log_dir)
+logger = Logger(log_dir)
 
 image_size = int(args.input_dim)  # only support 300 now
 means = (104, 117, 123)  # only support voc now

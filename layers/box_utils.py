@@ -103,8 +103,30 @@ def match(threshold, truths, priors, variances, labels, loc_t, conf_t, idx):
     for j in range(best_prior_idx.size(0)):
         best_truth_idx[best_prior_idx[j]] = j
     matches = truths[best_truth_idx]          # Shape: [num_priors,4]
-    conf = labels[best_truth_idx] + 1         # Shape: [num_priors]
-    conf[best_truth_overlap < threshold] = 0  # label as background
+    conf = labels[best_truth_idx] + 1   # Shape: [num_priors]
+
+    ####TODO the second stage is not up on 0.1 threshold, we just select the top_N
+    ### the implementation of " Scale Compensation Anchor matching strategy"
+    ### S3FD: Single Shot Scale-invariant Face Detector https://arxiv.org/abs/1708.05237
+
+    stage1_selection = best_truth_overlap > threshold
+
+    top_n = stage1_selection.sum()  ### in our setting, the num of anchors selected in stage 2 is equal to stage 1
+
+    best_truth_overlap_stage2 = best_truth_overlap.clone()
+    best_truth_overlap_stage2[stage1_selection] = 0
+    o,i = best_truth_overlap_stage2.sort(0,descending=True)
+    stage2_selection = i[:top_n]
+
+    # print(o[top_n])
+
+    stage1_selection[stage2_selection] = True
+
+    conf[1-stage1_selection] = 0  # label as background
+
+    # pos = conf > 0
+    # num_pos = pos.long().sum()
+
     loc = encode(matches, priors, variances)
     loc_t[idx] = loc    # [num_priors,4] encoded offsets to learn
     conf_t[idx] = conf  # [num_priors] top class label for each prior

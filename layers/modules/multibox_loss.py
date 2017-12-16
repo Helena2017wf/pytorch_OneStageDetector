@@ -78,7 +78,8 @@ class MultiBoxLoss(nn.Module):
         conf_t = Variable(conf_t, requires_grad=False)
 
         pos = conf_t > 0
-     #   num_pos = pos.sum(keepdim=True)
+        num_pos = pos.long().sum(1, keepdim=True)
+
         # print("num_pos",num_pos)
         # Localization Loss (Smooth L1)
         # Shape: [batch,num_priors,4]
@@ -88,8 +89,7 @@ class MultiBoxLoss(nn.Module):
         loss_l = F.smooth_l1_loss(loc_p, loc_t, size_average=False)
 
 
-        is_focal_loss = True
-        loss_c = None
+        is_focal_loss = False
 
         if is_focal_loss:
             conf_p = conf_data.view(-1,self.num_classes)
@@ -106,7 +106,6 @@ class MultiBoxLoss(nn.Module):
             loss_c = loss_c.view(num, -1)
             _, loss_idx = loss_c.sort(1, descending=True)
             _, idx_rank = loss_idx.sort(1)
-            num_pos = pos.long().sum(1, keepdim=True)
             # print(num_pos.long().sum()/16)
             # print(num_pos)
             num_neg = torch.clamp(self.negpos_ratio*num_pos, max=pos.size(1)-1)
@@ -123,7 +122,6 @@ class MultiBoxLoss(nn.Module):
             loss_c = F.cross_entropy(conf_p, targets_weighted, size_average=False)
 
             # Sum of losses: L(x,c,l,g) = (Lconf(x, c) + αLloc(x,l,g)) / N
-        num_pos = pos.long().sum(1, keepdim=True)
         N = num_pos.data.sum()
         loss_l /= N
         loss_c /= N
