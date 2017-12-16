@@ -398,3 +398,6 @@ class SSD(nn.Module):
                                       * num_classes, kernel_size=3, padding=1)]
         return vgg, extra_layers, (loc_layers, conf_layers)
 
+    def set_phase(self, phase):
+        assert phase in ['train', 'test']
+        self.phase = phase

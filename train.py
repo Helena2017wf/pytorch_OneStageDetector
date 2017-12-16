@@ -1,7 +1,7 @@
 import argparse
 import os
 import time
-
+import pickle
 # os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
 import numpy as np
 import torch
@@ -12,10 +12,10 @@ import torch.optim as optim
 import torch.utils.data as data
 from torch.autograd import Variable
 
-import evaluation
+from evaluation import evaluate_detections,Timer,get_output_dir
 from logger import Logger
 from Nets import get_net,get_config
-from data import DatasetRoot,GetDataset,AnnotationTransform,CLASSES,detection_collate,DATASET_NAME
+from data import DatasetRoot,GetDataset,AnnotationTransform,BaseTransform,CLASSES,detection_collate,DATASET_NAME
 from layers.modules import MultiBoxLoss
 from utils.augmentations import SSDAugmentation
 
@@ -43,11 +43,11 @@ parser.add_argument('--model_save_step', default=2000, type=int, help='the step 
 parser.add_argument('--basenet', default='vgg16_reducedfc.pth', help='pretrained base model')
 parser.add_argument('--jaccard_threshold', default=0.5, type=float, help='Min Jaccard index for matching')
 parser.add_argument('--batch_size', default=8, type=int, help='Batch size for training')
-parser.add_argument('--resume', default="weights/PDN512_Caltech_visible_5999.pth", type=str, help='Resume from checkpoint')
+parser.add_argument('--resume', default="weights/PDN512_Caltech_visible_9999.pth", type=str, help='Resume from checkpoint')
 parser.add_argument('--num_workers', default=4, type=int, help='Number of workers used in dataloading')
 parser.add_argument('--iterations', default=120000, type=int, help='Number of training iterations')
 parser.add_argument('--step_values', default=(80000,100000), type=list, help='the steps for decay learning rate')
-parser.add_argument('--start_iter', default=5999, type=int, help='Begin counting iterations starting from this value (should be used with resume)')
+parser.add_argument('--start_iter', default=9999, type=int, help='Begin counting iterations starting from this value (should be used with resume)')
 parser.add_argument('--cuda', default=True, type=str2bool, help='Use cuda to train model')
 parser.add_argument('--lr', '--learning-rate', default=1e-3, type=float, help='initial learning rate')
 parser.add_argument('--momentum', default=0.9, type=float, help='momentum')
@@ -57,9 +57,9 @@ parser.add_argument('--log_iters', default=True, type=bool, help='Print the loss
 
 parser.add_argument('--send_images_to_tensorboard', type=str2bool, default=True, help='Sample a random image from each log batch,'
                                                                                       ' send it to tensorboard after augmentations step')
-parser.add_argument('--validation', type=str2bool, default=False, help='validate the trained model')
-# parser.add_argument('--visdom', default=True, type=str2bool, help='Use visdom to for loss visualization')
-# parser.add_argument('--send_images_to_visdom', type=str2bool, default=True, help='Sample a random image from each 10th batch, send it to visdom after augmentations step')
+parser.add_argument('--validation', type=str2bool, default=True, help='validate the trained model')
+parser.add_argument('--validation_step', default=500, type=int, help='the step for validation')
+parser.add_argument('--validation_data_skip', default=600, type=int, help='the data skip step in validation procedure')
 parser.add_argument('--save_folder', default='weights/', help='Location to save checkpoint models')
 parser.add_argument('--voc_root', default=DatasetRoot, help='Location of VOC root directory')
 args = parser.parse_args()
@@ -206,12 +206,17 @@ def train():
             save_path = 'weights/' + args.net+args.input_dim +'_'+ DATASET_NAME + "_" + args.img_type + "_" + repr(iteration) + '.pth'
             torch.save(net.state_dict(), save_path )
 
-            if args.validation:
+        if args.validation and (iteration+1) % args.validation_step == 0 :
             ####evaluation##########
-                print("runing evaluation!!!!")
-                map, mam = evaluation.run_evaluation(input_dim=image_size,net_name= args.net, saved_model_name=save_path,skip=300)
-                logger.scalar_summary("mAP",map,iteration)
-                logger.scalar_summary("Average_Missing_Rate",mam,iteration)
+            print("runing evaluation!!!!")
+            # map, mam = evaluation.run_evaluation(input_dim=image_size,net_name= args.net, saved_model_name=save_path,skip=300)
+
+            net.set_phase("test")
+            map,mam = validation(net,skip=args.validation_data_skip)
+            net.set_phase("train")
+
+            logger.scalar_summary("mAP",map,iteration)
+            logger.scalar_summary("Average_Missing_Rate",mam,iteration)
 
     torch.save(net.state_dict(), args.save_folder + args.net+args.input_dim +'_'+ DATASET_NAME + "_" + args.img_type + '.pth')
 
@@ -224,6 +229,69 @@ def adjust_learning_rate(optimizer, gamma, step):
     lr = args.lr * (gamma ** (step))
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
+
+def validation(net,skip):
+    net.eval()
+    ### Load testing data
+
+    if DATASET_NAME == 'KAIST':
+        dataset = GetDataset(args.voc_root, BaseTransform(image_size, means), AnnotationTransform(),dataset_name='test20',skip=skip)
+    elif DATASET_NAME == 'VOC0712':
+        dataset = GetDataset(args.voc_root, BaseTransform(image_size, means), AnnotationTransform(),[('2007','test')])
+    elif DATASET_NAME == 'Sensiac':
+        dataset = GetDataset(args.voc_root, BaseTransform(image_size, means), AnnotationTransform(),dataset_name='day_test10')
+    elif DATASET_NAME == 'Caltech':
+        dataset = GetDataset(args.voc_root, BaseTransform(image_size, means), AnnotationTransform(), dataset_name='test01', skip=skip)
+
+    num_images = len(dataset)
+
+    all_boxes = [[[] for _ in range(num_images)]
+                 for _ in range(num_classes)]
+
+    _t = {'im_detect': Timer(), 'misc': Timer()}
+    output_dir = get_output_dir(DATASET_NAME+"_"+args.net+args.input_dim+"_120000", DATASET_NAME)
+    det_file = os.path.join(output_dir, 'detections.pkl')
+
+    index = 0
+    for i in range(num_images):
+        im, gt, h, w = dataset.pull_item(i)
+        # if not len(gt): ### some image dont have gt
+        #     continue
+
+        index = index+1
+        x = Variable(im.unsqueeze(0))
+        if args.cuda:
+            x = x.cuda()
+        _t['im_detect'].tic()
+        detections = net(x).data
+        detect_time = _t['im_detect'].toc(average=False)
+        print("%s/%s  time:%s"%(index,num_images,detect_time))
+        # skip j = 0, because it's the background class
+        for j in range(1, detections.size(1)):
+            dets = detections[0, j, :]
+            mask = dets[:, 0].gt(0.).expand(5, dets.size(0)).t()
+            dets = torch.masked_select(dets, mask).view(-1, 5)
+            if dets.dim() == 0:
+                continue
+            boxes = dets[:, 1:]
+            boxes[:, 0] *= w
+            boxes[:, 2] *= w
+            boxes[:, 1] *= h
+            boxes[:, 3] *= h
+            scores = dets[:, 0].cpu().numpy()
+            cls_dets = np.hstack((boxes.cpu().numpy(), scores[:, np.newaxis])) \
+                .astype(np.float32, copy=False)
+            all_boxes[j][i] = cls_dets
+        #all boxes format [classes(2)][num_images][coordinates and score]
+        # print('im_detect: {:d}/{:d} {:.3f}s'.format(i + 1,
+        #                                             num_images, detect_time))
+
+    with open(det_file, 'wb') as f:
+        pickle.dump(all_boxes, f, pickle.HIGHEST_PROTOCOL)
+
+    print('Evaluating detections')
+    map, mam = evaluate_detections(all_boxes, output_dir, dataset)
+    return map,mam
 
 
 if __name__ == '__main__':

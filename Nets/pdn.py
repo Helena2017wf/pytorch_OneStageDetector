@@ -48,10 +48,9 @@ class PDN(nn.Module):
         self._loc = nn.ModuleList(self._loc)
         self._conf = nn.ModuleList(self._conf)
 
-        if phase == 'test':
-            self.softmax = nn.Softmax()
-            # self.detect = Detect(num_classes, 0, 200, 0.01, 0.45) ##ssd original
-            self.detect = Detect(num_classes,cfg, 0, 200, 0.01, 0.45) ##for Kaist
+        self.softmax = nn.Softmax()
+        # self.detect = Detect(num_classes, 0, 200, 0.01, 0.45) ##ssd original
+        self.detect = Detect(num_classes,cfg, 0, 200, 0.01, 0.45) ##for Kaist
 
     def forward(self, x):
         """Applies network layers and ops on input image(s) x.
@@ -198,32 +197,6 @@ class PDN(nn.Module):
         #                               * num_classes, kernel_size=3, padding=1)]
         return loc_layers, conf_layers
 
-#
-# base = {
-#     '300': [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 'C', 512, 512, 512, 'M',
-#             512, 512, 512],
-#     '512': [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 'C', 512, 512, 512, 'M',
-#             512, 512, 512],
-# }
-# extras = {
-#     '300': [256, 'S', 512, 128, 'S', 256, 128, 256, 128, 256],
-#     '512': [256, 'S', 512, 128, 'S', 256, 128, 'S', 256, 128,'S',256, 128,'L'],
-# }
-# mbox = {
-#     ##TODO
-#     '300': [4, 4, 4, 4, 4, 4],  # number of boxes per feature map location
-#     '512': [4, 6, 6, 6, 6, 4, 4],
-# }
-
-
-# def build_PDN(phase, size=300, num_classes=21):
-#     if phase != "test" and phase != "train":
-#         print("Error: Phase not recognized")
-#         return
-#     # if size != 300:
-#     #     print("Error: Sorry only SSD300 is supported currently!")
-#     #     return
-#
-#     return SSD( size, phase, *multibox(vgg(base[str(size)], 3),
-#                                 add_extras(extras[str(size)], 1024),
-#                                 mbox[str(size)], num_classes), num_classes)
+    def set_phase(self, phase):
+        assert phase in ['train', 'test']
+        self.phase = phase
