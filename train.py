@@ -47,7 +47,7 @@ parser.add_argument('--resume', default="weights/PDN512_Caltech_visible_5999.pth
 parser.add_argument('--num_workers', default=4, type=int, help='Number of workers used in dataloading')
 parser.add_argument('--iterations', default=120000, type=int, help='Number of training iterations')
 parser.add_argument('--step_values', default=(80000,100000), type=list, help='the steps for decay learning rate')
-parser.add_argument('--start_iter', default=6000, type=int, help='Begin counting iterations starting from this value (should be used with resume)')
+parser.add_argument('--start_iter', default=5999, type=int, help='Begin counting iterations starting from this value (should be used with resume)')
 parser.add_argument('--cuda', default=True, type=str2bool, help='Use cuda to train model')
 parser.add_argument('--lr', '--learning-rate', default=1e-3, type=float, help='initial learning rate')
 parser.add_argument('--momentum', default=0.9, type=float, help='momentum')
@@ -57,7 +57,7 @@ parser.add_argument('--log_iters', default=True, type=bool, help='Print the loss
 
 parser.add_argument('--send_images_to_tensorboard', type=str2bool, default=True, help='Sample a random image from each log batch,'
                                                                                       ' send it to tensorboard after augmentations step')
-parser.add_argument('--validation', type=str2bool, default=True, help='validate the trained model')
+parser.add_argument('--validation', type=str2bool, default=False, help='validate the trained model')
 # parser.add_argument('--visdom', default=True, type=str2bool, help='Use visdom to for loss visualization')
 # parser.add_argument('--send_images_to_visdom', type=str2bool, default=True, help='Sample a random image from each 10th batch, send it to visdom after augmentations step')
 parser.add_argument('--save_folder', default='weights/', help='Location to save checkpoint models')
