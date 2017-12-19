@@ -31,9 +31,9 @@ def str2bool(v):
     return v.lower() in ("yes", "true", "t", "1")
 
 parser = argparse.ArgumentParser(description='Single Shot MultiBox Detection')
-parser.add_argument('--net', default='SSD', help='detection network')
+parser.add_argument('--net', default='PDN', help='detection network')
 parser.add_argument('--input_dim', default='512', help='the dimension of the input image')
-parser.add_argument('--trained_model', default='weights/ssd_512_VOC0712_visible_119999.pth',
+parser.add_argument('--trained_model', default='weights/PDN512_Caltech_visible.pth',
                     type=str, help='Trained state_dict file path to open')
 parser.add_argument('--save_folder', default='eval/', type=str,
                     help='File path to save results')
@@ -706,7 +706,7 @@ def run_evaluation(input_dim,net_name, saved_model_name,skip=0):
 
 if __name__ == '__main__':
 
-    map, mam = run_evaluation(input_dim=int(args.input_dim),net_name=args.net,saved_model_name=args.trained_model)
+    map, mam = run_evaluation(input_dim=int(args.input_dim),net_name=args.net,saved_model_name=args.trained_model,skip=30)
 
     print("map:",map,"mam",mam)
     # dataset = GetDataset(args.voc_root, BaseTransform(300, dataset_mean), AnnotationTransform(), dataset_name='test20',skip=0)

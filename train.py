@@ -2,6 +2,7 @@ import argparse
 import os
 import time
 import pickle
+import glob
 # os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
 import numpy as np
 import torch
@@ -32,6 +33,7 @@ def str2bool(v):
     return v.lower() in ("yes", "true", "t", "1")
 
 parser = argparse.ArgumentParser(description='Single Shot MultiBox Detector Training')
+parser.add_argument('--version', default='', help='the mark for indicating which version')
 parser.add_argument('--net', default='PDN', help='detection network')
 parser.add_argument('--input_dim', default='512', help='the dimension of the input image')
 parser.add_argument('--img_type', default='visible', help='format of image (visible, lwir,...)')
@@ -43,11 +45,12 @@ parser.add_argument('--model_save_step', default=2000, type=int, help='the step 
 parser.add_argument('--basenet', default='vgg16_reducedfc.pth', help='pretrained base model')
 parser.add_argument('--jaccard_threshold', default=0.5, type=float, help='Min Jaccard index for matching')
 parser.add_argument('--batch_size', default=8, type=int, help='Batch size for training')
-parser.add_argument('--resume', default="weights/PDN512_Caltech_visible_9999.pth", type=str, help='Resume from checkpoint')
+parser.add_argument('--resume', default=True, type=str2bool, help='Resume from the latest checkpoint')
+parser.add_argument('--resume_checkpoint', default=None, type=str, help='specific checkpoint to be resumed')
+
 parser.add_argument('--num_workers', default=4, type=int, help='Number of workers used in dataloading')
 parser.add_argument('--iterations', default=120000, type=int, help='Number of training iterations')
 parser.add_argument('--step_values', default=(80000,100000), type=list, help='the steps for decay learning rate')
-parser.add_argument('--start_iter', default=9999, type=int, help='Begin counting iterations starting from this value (should be used with resume)')
 parser.add_argument('--cuda', default=True, type=str2bool, help='Use cuda to train model')
 parser.add_argument('--lr', '--learning-rate', default=1e-3, type=float, help='initial learning rate')
 parser.add_argument('--momentum', default=0.9, type=float, help='momentum')
@@ -57,7 +60,7 @@ parser.add_argument('--log_iters', default=True, type=bool, help='Print the loss
 
 parser.add_argument('--send_images_to_tensorboard', type=str2bool, default=True, help='Sample a random image from each log batch,'
                                                                                       ' send it to tensorboard after augmentations step')
-parser.add_argument('--validation', type=str2bool, default=True, help='validate the trained model')
+parser.add_argument('--validation', type=str2bool, default=False, help='validate the trained model')
 parser.add_argument('--validation_step', default=500, type=int, help='the step for validation')
 parser.add_argument('--validation_data_skip', default=600, type=int, help='the data skip step in validation procedure')
 parser.add_argument('--save_folder', default='weights/', help='Location to save checkpoint models')
@@ -84,32 +87,36 @@ image_size = int(args.input_dim)  # only support 300 now
 means = (104, 117, 123)  # only support voc now
 num_classes = len(CLASSES) + 1
 batch_size = args.batch_size
+start_iter = 0
 
-######## For future multi-GPU training #########
-# accum_batch_size = 32
-# iter_size = accum_batch_size / batch_size
-
-# max_iter = 120000
-# weight_decay = 0.0005
-# stepvalues = (80000, 100000, 120000)
-# gamma = 0.1
-# momentum = 0.9
-
-# if args.visdom:
-#     import visdom
-#     viz = visdom.Visdom()
 
 net_class = get_net(args.net)
 net = net_class('train', image_size, num_classes,cfg)
 parallel_net = net
 print_network(net,args.net+args.input_dim)
+
 if args.cuda:
     parallel_net = torch.nn.DataParallel(net)
     cudnn.benchmark = True
 
+def latest_checkpoint(prefix):
+    checkpoints = glob.glob(prefix)
+    iters = [ int(os.path.splitext(x)[0].split("_")[-1])for x in checkpoints]
+    index = sorted(range(len(iters)),key=lambda k:iters[k])
+    start_iter = iters[index[-1]]
+    latest_one = checkpoints[index[-1]]
+
+    return latest_one,start_iter
+
 if args.resume:
-    print('Resuming training, loading {}...'.format(args.resume))
-    net.load_weights(args.resume)
+    if args.resume_checkpoint:
+        resume_path = args.resume_checkpoint
+        start_iter = int(os.path.splitext(args.resume_checkpoint)[0].split("_")[-1])
+    else:
+        prefix = os.path.join(args.save_folder,args.net+args.input_dim+"_"+DATASET_NAME+"_"+args.img_type+"_"+args.version+"*")
+        resume_path,start_iter = latest_checkpoint(prefix)
+    print('Resuming training, loading {}...'.format(resume_path))
+    net.load_weights(resume_path)
 else:
     vgg_weights = torch.load(args.save_folder + args.basenet)
     print('Loading base network...')
@@ -159,7 +166,7 @@ def train():
     batch_iterator = None
     data_loader = data.DataLoader(dataset, batch_size, num_workers=args.num_workers,
                                   shuffle=True, collate_fn=detection_collate, pin_memory=True)
-    for iteration in range(args.start_iter, args.iterations):
+    for iteration in range(start_iter, args.iterations):
         if (not batch_iterator) or (iteration % epoch_size == 0):
             # create batch iterator
             batch_iterator = iter(data_loader)
